@@ -1,7 +1,7 @@
 # XAI_for_genomics
 
 This repository contains the code of the experiments performed in the following paper\
-[Studying Limits of Explainability by Integrated Gradients for Gene Expression Models]()
+[Studying Limits of Explainability by Integrated Gradients for Gene Expression Models](https://arxiv.org/pdf/2303.11336v1.pdf)
 by Myriam Bontonou, Anaïs Haget, Maria Boulougouri, Jean-Michel Arbona, Benjamin Audit, Pierre Borgnat.
 
 ## Abstract

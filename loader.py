@@ -134,12 +134,14 @@ def load_dataloader(data_path, name, device, batch_size):
         for _class in range(n_class):
             assert torch.sum(y_train==_class) >= 10
             assert torch.sum(y_test==_class) >= 10
-        train_set = custom_dataset(X_train, y_train)
-        test_set = custom_dataset(X_test, y_test)
-
+            
         # Normalization
         X_train, X_test = normalize_train_test(X_train, X_test, log=True)
         transform = None
+        
+        # Create train/test datasets
+        train_set = custom_dataset(X_train, y_train)
+        test_set = custom_dataset(X_test, y_test)
         
         # Create train/test loaders
         train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size)

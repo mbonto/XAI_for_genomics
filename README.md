@@ -4,7 +4,7 @@ This repository contains the code of the experiments performed in the following 
 [Studying Limits of Explainability by Integrated Gradients for Gene Expression Models](https://arxiv.org/pdf/2303.11336v1.pdf)
 by Myriam Bontonou, Anaïs Haget, Maria Boulougouri, Jean-Michel Arbona, Benjamin Audit, Pierre Borgnat.
 
-This repository also contains the code to reproduce the additional results presented in the French article\
+This repository also contains the code of the additional results presented in the French article\
 [Expliquer la classification d'expression de gènes par la méthode des gradients intégrés]().
 
 

@@ -49,12 +49,4 @@ dataset = {
 np.save(os.path.join(data_path, name + '.npy'), dataset)
 
 
-# Compute the correlation matrix and save it
-random_state = 43
-test_size = 0.4
-train_indices, test_indices = split_indices(n_sample, test_size, random_state)
-data, _, _, _ = split_data_from_indices(X, y, train_indices, test_indices)
-A = get_a_graph(data, method='pearson_correlation')
-remove_diag(A)
-create_new_folder(save_path)
-np.save(os.path.join(save_path, 'graph', 'pearson_correlation.npy'), A)
+

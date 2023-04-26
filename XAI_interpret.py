@@ -58,26 +58,35 @@ def sort_features(reference, order, scores):
     return sorted_indices
 
 
-def remove_features(X, sorted_features, number):
-    """Set to 0 the first `number` sorted_features in X.
+def remove_features(X, sorted_features, number, baseline):
+    """Replace the first `number` sorted_features in `X` by th values in `baseline`.
     """
     zeros = sorted_features[:number]
     X_temp = X.clone()
     device = X_temp.device
-    X_temp[:, zeros] = torch.zeros((X.shape[0], number)).to(device)
+    s = np.repeat(np.arange(X.shape[0]), len(zeros))
+    f = np.tile(zeros, X.shape[0])
+    X_temp[s, f] = baseline[np.repeat(np.zeros(X.shape[0]), len(zeros)), f].clone().detach().to(device)
     return X_temp
 
 
-def keep_features(X, best_indices):
+def keep_features(X, best_indices, baseline):
     """Set to 0 the features which are not in best_indices.
+    
+    Parameters:
+        X  --  Inputs, torch tensor (n_sample, n_feat).
+        best_indices  -- Indices of the features to keep (the others are set to 0).
+        baseline  --  Values used to modify the values of the input features. Tensor (1, n_feat).
     """
     zeros = np.array(list(set(np.arange(0, X.shape[1], 1)) - set(best_indices)))
     X_temp = X.clone()
     device = X_temp.device
-    X_temp[:, zeros] = torch.zeros((X.shape[0], len(zeros))).to(device)
+    s = np.repeat(np.arange(X.shape[0]), len(zeros))
+    f = np.tile(zeros, X.shape[0])
+    X_temp[s, f] = baseline[np.repeat(np.zeros(X.shape[0]), len(zeros)), f].clone().detach().to(device)
     return X_temp
-
-
+            
+            
 def get_metrics(model, X, y, labels_name=None, get_cm=True):
     """Given a model, input data X and labels y, return the accuracy, the classification report and a confusion matrix.    
     """
@@ -95,7 +104,7 @@ def get_metrics(model, X, y, labels_name=None, get_cm=True):
         return b_acc, acc, _dict
 
 
-def get_metrics_with_removed_features(model, X, y, classes, sorted_features, nb_to_remove, feat_to_remove=[]):
+def get_metrics_with_removed_features(model, X, y, baseline, classes, sorted_features, nb_to_remove, feat_to_remove=[]):
     """
     After removing some features, the accuracy, precision, recall are computed. 
     
@@ -103,6 +112,7 @@ def get_metrics_with_removed_features(model, X, y, classes, sorted_features, nb_
         model  --  neural network
         X  --  input, torch tensor (batch_size, n_feat)
         y  --  labels, torch tensor (batch_size)
+        baseline  --  Values used to modify the values of the input features. Tensor (1, n_feat).
         classes  -- list containing the classes to consider
         sorted_features  -- indices of the features, the first ones are removed first.
         nb_to_remove -- list containing the numbers of features to remove from X
@@ -122,7 +132,7 @@ def get_metrics_with_removed_features(model, X, y, classes, sorted_features, nb_
             features = list(feat_to_remove[i]) + [feat for feat in sorted_features if feat not in feat_to_remove[i]]
         else:
             features = sorted_features.copy()
-        X_temp = remove_features(X, features, nb)
+        X_temp = remove_features(X, features, nb, baseline)
         b_acc, acc, _dict = get_metrics(model, X_temp, y, None, get_cm=False)
         balanced_accuracy.append(b_acc)
         accuracy.append(acc)
@@ -135,20 +145,22 @@ def get_metrics_with_removed_features(model, X, y, classes, sorted_features, nb_
 
 
 
-def get_metrics_with_selected_features(model, X, y, feat_to_keep, classes=[]):
+def get_metrics_with_selected_features(model, X, y, feat_to_keep, baseline, classes=[]):
     """
     Return the performance of the model after setting some features to 0. 
     
     Parameters:
-        model  --  neural network
-        X  --  input, torch tensor (batch_size, n_feat)
-        y  --  labels, torch tensor (batch_size)
-        feat_to_keep  -- indices of the features to keep (the others are set to 0)
+        model  --  Neural network.
+        X  --  Inputs, torch tensor (n_sample, n_feat).
+        y  --  Labels, torch tensor (n_sample).
+        feat_to_keep  -- Indices of the features to keep (the others are set to 0).
+        baseline  --  Values used to modify the values of the input features. Tensor (1, n_feat).
+        classes  --  Classes to consider (for precision and recall). List or None.
     """
     recall = {}
     precision = {}
 
-    X_temp = keep_features(X, feat_to_keep)
+    X_temp = keep_features(X, feat_to_keep, baseline)
     balanced_accuracy, accuracy, _dict = get_metrics(model, X_temp, y, None, get_cm=False)
 
     for _class in classes:
@@ -160,7 +172,7 @@ def get_metrics_with_selected_features(model, X, y, feat_to_keep, classes=[]):
 
 
 # Global representation (per class)
-def get_results_per_class(model, X, y, K, scores, setting='keep_best', classes=[]):
+def get_results_per_class(model, X, y, K, scores, setting, baseline, classes=[]):
     """
     Compute several metrics measuring the performance of 'model' when the top-k features per class are kept (others features set to 0) or removed (set to 0).
     Return 
@@ -181,7 +193,8 @@ def get_results_per_class(model, X, y, K, scores, setting='keep_best', classes=[
                     scores[_class]['attr'] is a list of floats indicating the importance of a feature.
                     scores[_class]['sorted_indices'] is a list of indices sorting the 'attr' with decreasing absolute values.
         setting  --  'keep_best' or 'remove_best', indicate whether the best features are kept or removed
-        classes  -- None or list containing the classes to consider (for precision and recall)
+        baseline  --  Values used to modify the values of the input features. Tensor (1, n_feat).
+        classes  -- None or list containing the classes to consider (for precision and recall).
     """
     assert setting in ['keep_best', 'remove_best']
     
@@ -205,7 +218,7 @@ def get_results_per_class(model, X, y, K, scores, setting='keep_best', classes=[
         n_kept.append(len(feat_to_keep))
         kept_feat.append(feat_to_keep)
 
-        balanced_accuracy, accuracy, recall, precision = get_metrics_with_selected_features(model, X, y, feat_to_keep)
+        balanced_accuracy, accuracy, recall, precision = get_metrics_with_selected_features(model, X, y, feat_to_keep, baseline, classes)
 
         results['accuracy'].append(accuracy)
         results['balanced_accuracy'].append(balanced_accuracy)
@@ -236,7 +249,7 @@ def keep_best_features(nb_per_class, scores):
 
 
 # Local representation (per sample)
-def get_results_with_best_features_kept_or_removed(model, X, y, K, attr, classes=[], kept=True, balance=False):
+def get_results_with_best_features_kept_or_removed(model, X, y, K, attr, baseline, classes=[], kept=True, balance=False):
     """
     Compute several metrics measuring the performance of 'model' when the top-k best features are removed (set to 0) or 
     kept (all the others set to 0).
@@ -250,14 +263,15 @@ def get_results_with_best_features_kept_or_removed(model, X, y, K, attr, classes
             results[_class]['precision']  --  a list of precision for a _class specified in `classes`
             
     Parameters:
-        model  --  neural network
-        X  --  input, torch tensor (batch_size, n_feat)
-        y  --  labels, torch tensor (batch_size)
-        K -- list of integers k, numbers of best features to keep or remove
-        attr  --  importance of the features per sample, array (batch_size, n_feat)
-        classes  -- None or list containing the classes to consider (for precision and recall)
-        kept  --  True or False, indicate whether the features are kept or removed
-        balance  -- True or False, indicate whether the average importance of a feature is balanced wrt the class imbalance
+        model  --  Neural network.
+        X  --  Input, torch tensor (batch_size, n_feat).
+        y  --  Labels, torch tensor (batch_size).
+        K --  Numbers of best features to keep or remove. List of integers k.
+        attr  --  Importance of the features per sample, array (batch_size, n_feat).
+        baseline  --  Values used to modify the values of the input features. Tensor (1, n_feat).
+        classes  --  Classes to consider (for precision and recall). None or list.
+        kept  --  Indicate whether the features are kept or removed. True or False,
+        balance  -- Indicate whether the average importance of a feature is balanced wrt the class imbalance. True or False.
     """
     kept_feat = []
     results = {}
@@ -286,7 +300,7 @@ def get_results_with_best_features_kept_or_removed(model, X, y, K, attr, classes
     for k in K:
         feat_to_keep = indices[:k]
         kept_feat.append(feat_to_keep)
-        balanced_accuracy, accuracy, recall, precision = get_metrics_with_selected_features(model, X, y, feat_to_keep)
+        balanced_accuracy, accuracy, recall, precision = get_metrics_with_selected_features(model, X, y, feat_to_keep, baseline, classes)
 
         results['accuracy'].append(accuracy)
         results['balanced_accuracy'].append(balanced_accuracy)
@@ -300,19 +314,20 @@ def get_results_with_best_features_kept_or_removed(model, X, y, K, attr, classes
 
 
 # Random
-def get_results_with_random_features(model, X, y, nb_to_keep, n_simu, classes=[], feat_to_remove=[]):
+def get_results_with_random_features(model, X, y, nb_to_keep, n_simu, baseline, classes=[], feat_to_remove=[]):
     """
     Return the accuracy and balanced accuracy of 'model' when random features are set to 0. 
     Also return the precision and recall for the specified 'classes'.
     
     Parameters:
-        model  --  neural network
-        X  --  input, torch tensor (batch_size, n_feat)
-        y  --  labels, torch tensor (batch_size)
-        nb_to_keep -- list containing the numbers of features to keep from X
-        n_simu  --  int, number of simulations the results are computed on
-        classes  -- None or list containing the classes to consider (for precision and recall)
-        feat_to_remove  --  None, list containing lists of features to remove from X (the additional ones are removed randomly)
+        model  --  Neural network.
+        X  --  Input, torch tensor (batch_size, n_feat).
+        y  --  Labels, torch tensor (batch_size).
+        nb_to_keep -- Numbers of features to keep from X. List.
+        baseline  --  Values used to modify the values of the input features. Tensor (1, n_feat).
+        n_simu  --  Number of simulations the results are computed on. Integer.
+        classes  -- Classes to consider (for precision and recall). List or None.
+        feat_to_remove  -- Lists of features to remove from X (the additional ones are removed randomly). List or None.
     """
     # Initialize the outputs
     results = {}
@@ -328,7 +343,7 @@ def get_results_with_random_features(model, X, y, nb_to_keep, n_simu, classes=[]
     random_features = np.arange(0, n_feat, 1)
     for i in range(n_simu):
         np.random.shuffle(random_features)
-        balanced_accuracy, accuracy, recall, precision = get_metrics_with_removed_features(model, X, y, classes, random_features, n_feat - nb_to_keep, feat_to_remove)
+        balanced_accuracy, accuracy, recall, precision = get_metrics_with_removed_features(model, X, y, baseline, classes, random_features, n_feat - nb_to_keep, feat_to_remove)
         results['balanced_accuracy'].append(balanced_accuracy)
         results['accuracy'].append(accuracy)
         for _class in classes:
@@ -351,70 +366,170 @@ def get_results_with_random_features(model, X, y, nb_to_keep, n_simu, classes=[]
 
 
 
-# Prediction gaps
-def prediction_gap_with_dataloader(model, loader, transform, attr, n_class, _type, y_true, y_pred, int_gap):
+# Prediction gaps        
+def prediction_gap_with_dataloader(model, loader, transform, attr, gap, baseline, studied_class, indices=None,_type=None, y_true=None, y_pred=None):
+    """
+    Return the average of the prediction gaps (PGs) computed on the correctly classified examples belonging to `studied_class`. 
+    Each PG is computed by iteratively replacing the values of the features of an example by the values of the baseline.
+
+    Parameters:
+        model  --  Neural network.
+        loader  --  Dataloader.
+        transform  --  Function applied to the input tensors to scale the data.
+        attr  --  Attributions. Tensor (n_sample, n_feat).
+        gap  --  The PG is computed iteratively after modifying the `gap` first unmodified features.
+        baseline  --  Values used to modify the values of the input features. Tensor (1, n_feat).
+        studied_class  --  Compute the PGs for all examples belonging to a class listed in `studied_class`. List of integers.
+        indices  --  Order of the features to remove. Array (1, n_feat) or None.
+        _type  --  When `indices` is None, order of importance by which the features of each example are going to be modified. "important", "unimportant" or None.
+        y_true  --  Classes of the n_sample contained in `attr`. Used for a sanity check. Tensor (n_sample, 1) or None.  
+        y_pred  --  Classes of the n_sample contained in `attr` predicted by the model. Tensor (n_sample, 1) or None.
+    """
     # Informations
-    n_sample = len(loader.sampler)
+    if indices is None:
+        assert _type in ["important", "unimportant"], "Provide a ranking of features for all examples with `indices` or choose a ranking `_type` for each example."
+    if indices is not None:
+        assert _type is None, "Provide a ranking of features for all examples with `indices` or a ranking `_type` for each example. Not both."
+    assert len(studied_class) > 0, "Provide a list of classes to consider for computing the PGs."
+    n_sample = len(attr)
     x, _ =  next(iter(loader))
     n_feat = x.shape[1]
     device = model.fc.weight.device
 
+    # Store the gaps
+    PG = {}
+    n_per_class = {}
+    for c in studied_class:
+        PG[c] = 0
+        n_per_class[c] = 0
+    
     # Compute the gaps
-    PG = np.zeros(n_class)
-    count_per_class = np.zeros(n_class)
-
-    torch.manual_seed(1)
+    torch.manual_seed(1)  # Seed needed to load the examples in the same order as in `attr`.
     count = 0
     for i, (x, y) in enumerate(loader):
         print(i, end='\r')
-        batch_size = x.shape[0]
 
+        # Data
+        x = x[sum(y == c for c in studied_class).bool()]
+        y = y[sum(y == c for c in studied_class).bool()]
+        batch_size = x.shape[0]
         x = x.to(device)
         y = y.numpy()
         if transform:
             x = transform(x)
-
-        # Check data order with true classes
-        assert (y == y_true[count:count + batch_size]).all(), 'Problem with data order.'
-
-        # Check model 
         _class = torch.argmax(model(x), axis=1).cpu().numpy() * 1.
-        assert (_class == y_pred[count:count + batch_size]).all(), 'Problem with model.'
 
-        # Rank features by importance
+        # Sanity checks
+        ## Check data order with true classes
+        if y_true is not None:
+            assert (y == y_true[count:count + batch_size]).all(), 'Problem with data order.'
+        ## Check model
+        if y_pred is not None:
+            assert (_class == y_pred[count:count + batch_size]).all(), 'Problem with model.'
+
+        # If indices is not defined as an input variable, rank features by importance for each example
         if _type == 'important':
             indices = np.argsort(-attr[count:count + batch_size], axis=1)
         elif _type == 'unimportant':
             indices = np.argsort(attr[count:count + batch_size], axis=1)
 
         # Prediction gap
-        n_point = int(n_feat / int_gap)
+        n_point = int(n_feat / gap)
         pred_gap = np.zeros((batch_size, n_point))
         pred_full = model(x)[np.arange(batch_size), y].detach().cpu().numpy()
 
         for i in range(n_point):
-            s = np.repeat(np.arange(batch_size), int_gap)
-            f = indices[:, i*int_gap:i*int_gap+int_gap].reshape(-1)
-            x[s, f] = torch.zeros((batch_size * int_gap)).to(device)
+            s = np.repeat(np.arange(batch_size), gap)
+            if len(indices) != batch_size:
+                f = np.tile(indices[0, i * gap:i * gap + gap], batch_size)
+            else:
+                f = indices[:, i * gap:i * gap + gap].reshape(-1)
+            x[s, f] = baseline[np.repeat(np.zeros(batch_size), gap), f].clone().detach().to(device)
             pred = model(x)
             pred = pred[np.arange(batch_size), y].detach().cpu().numpy()
             pred_gap[:, i] = pred_full - pred
         mask = (pred_gap) > 0 * 1.0
-        copy = pred_gap.copy()
-        pred_gap = np.sum(mask * pred_gap, axis=1)/n_feat*int_gap
+        pred_gap = np.sum(mask * pred_gap, axis=1) / n_feat * gap
 
         # Sum without taking into account misclassified examples
-        correct_indices = (_class == y)
         for s in range(batch_size):
             if _class[s] == y[s]:
-                PG[y[s]] += np.sum(pred_gap[s])
-                count_per_class[y[s]] += 1
+                if y[s] in studied_class:
+                    PG[y[s]] += np.sum(pred_gap[s])
+                    n_per_class[y[s]] += 1
 
         # Update count
         count += batch_size
 
     # Average PG per class
-    PG = PG / count_per_class
+    for c in studied_class:
+        PG[c] = PG[c] / n_per_class[c]
 
     return PG
 
+
+def prediction_gap_for_an_example(model, x, y, transform, attr, gap, baseline, indices):
+    """
+    Return the prediction gap (PG) computed on an example `x`. The PG is computed by 
+    iteratively replacing the values in `x` by the values in `baseline`.
+
+    Parameters:
+        model  --  Neural network.
+        x  --  Example. Tensor (1, n_feat).
+        y  --  Class of `x`. Integer.
+        transform  --  Function scaling to the input `x`.
+        attr  --  Attributions. Tensor (1, n_feat).
+        gap  --  The PG is computed iteratively after modifying the `gap` first unmodified features.
+        baseline  --  Values used to modify the values of the input features. Tensor (1, n_feat).
+        indices  --  Order of the features to remove. Array (1, n_feat).
+    """
+    # Informations
+    n_feat = x.shape[1]
+    device = model.fc.weight.device
+    
+    # Transform x
+    x = x.to(device)
+    if transform:
+        x = transform(x)
+        
+    # Prediction gap
+    n_point = int(n_feat / gap)
+    pred_gap = np.zeros((n_point))
+    pred_full = model(x)[0, y].detach().cpu().numpy()
+    for i in range(n_point):
+        s = np.repeat(np.arange(1), gap)
+        f = indices[0, i * gap:i * gap + gap]
+        x[s, f] = baseline[s, f].clone().detach()
+        pred = model(x)
+        pred = pred[0, y].detach().cpu().numpy()
+        pred_gap[i] = pred_full - pred
+    mask = (pred_gap) > 0 * 1.0
+    curve = mask * pred_gap
+    PG = np.sum(curve) / n_feat * gap
+    return PG, curve
+
+
+def get_features_order(attr, _type="increasing"):
+    """Return an array containing the indices of the n_feat features of `attr` ranked in a certain order. The order is either
+    computed from the sum of the values of the n_sample examples ("increasing" or "decreasing"), or from the sum of the rank
+    of the values of the features in each example ("rank_increasing" or "rank_decrasing"). The rank can also be "random".
+
+    Parameters:
+        attr  --  Array of size (n_sample, n_feat).
+        _type  --  Str, "random", "increasing", "decreasing", "rank_increasing", "rank_decreasing".
+    """
+    if _type == "random":
+        order = np.arange(0, attr.shape[1])
+        np.random.shuffle(order)
+    else:
+        if _type.split('_')[0] == "rank":
+            ranks = np.argsort(attr, axis=1)
+            _sum = np.sum(ranks, axis=0)
+            _type = _type.split('_')[1]
+        else:
+            _sum = np.sum(attr, axis=0)
+        if _type == "increasing":
+            order = np.argsort(_sum)
+        elif _type == 'decreasing':
+            order = np.argsort(-_sum)
+    return order.reshape(1, -1)

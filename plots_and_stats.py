@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 import os
 import colorcet as cc
-from loader import get_X_y
+from loader import get_X_y, scale_data
 
 
 def describe_dataset(data):
@@ -61,10 +61,13 @@ def describe_dataloader(data_loader):
 
 
 
-def plot_random_gene_expression(data, group_by_classes=True, gene_index=None, log_scale=False, log=False, unit='count'):
+def plot_random_gene_expression(data, group_by_classes=True, gene_index=None, log_scale=False, log=False, scale=False, unit='count'):
     info_X, info_y = get_X_y(data)    
     info_X = np.array(info_X)
     info_y = np.ravel(np.array(info_y))
+    
+    if scale:
+        info_X = np.log2(scale_data(2**info_X-1, _type='sum', factor=10**6) + 1)
     
     if log:
         info_X = np.log2(info_X + 1)
@@ -89,24 +92,30 @@ def plot_random_gene_expression(data, group_by_classes=True, gene_index=None, lo
         plt.xlabel(f"Gene expresion ({unit})")
 
 
-def plot_random_sample_expression(data, log=False, unit='count', index=None):
+def plot_random_sample_expression(data, log=False, unit='count', index=None, scale=False):
     plt.figure(figsize=(20, 2))
     if index is None:
         index = np.random.randint(0, len(data))
     ID = data.sample_IDs[index]
-    if log:
+    if scale:
+        sample = scale_data((2**data.expression.loc[ID].values-1).reshape(1, -1), _type='sum', factor=10**6).reshape(-1)
+        plt.plot(np.log2(sample + 1), '.')
+    elif log:
         plt.plot(np.log2(data.expression.loc[ID].values + 1), '.')
     else:
         plt.plot(data.expression.loc[ID].values, '.')
     plt.xlabel("Gene index")
     plt.ylabel(f"Gene expression\n({unit})")
-    plt.title("Gene expression in a random sample.")      
+    plt.title("Gene expression in a random sample.")         
         
 
-def plot_stats_on_gene_expression(data, criteria='average', log_scale=False, log=False, unit='count'):
+def plot_stats_on_gene_expression(data, criteria='average', log_scale=False, log=False, scale=False, unit='count'):
     info_X, info_y = get_X_y(data) 
     info_X = np.array(info_X)
     info_y = np.array(info_y)
+    
+    if scale:
+        info_X = np.log2(scale_data(2**info_X-1, _type='sum', factor=10**6) + 1)
     
     if log:
         info_X = np.log2(info_X + 1)
@@ -140,10 +149,13 @@ def plot_stats_on_gene_expression(data, criteria='average', log_scale=False, log
     plt.xlabel(f"{criteria.capitalize()} expression per locus ({unit})")
     
     
-def sort_genes(data, criteria='average', log_scale=False, unit='count'):
+def sort_genes(data, criteria='average', log_scale=False, scale=False, unit='count'):
     info_X, info_y = get_X_y(data)
     info_X = np.array(info_X)
     info_y = np.array(info_y)
+    
+    if scale:
+        info_X = np.log2(scale_data(2**info_X-1, _type='sum', factor=10**6) + 1)
     
     if criteria == 'average':
         info_X = np.mean(info_X, axis=0)
@@ -182,11 +194,14 @@ def plot_class_imbalance(data, label_name, save_path=None):
     plt.show()
     
 
-def describe_gene_expression(data, log_scale=True, unit='count', log=False):
+def describe_gene_expression(data, log_scale=True, unit='count', log=False, scale=False):
     info_X, info_y = get_X_y(data)
     info_X = np.array(info_X)
     info_y = np.array(info_y)
     
+    if scale:
+        info_X = np.log2(scale_data(2**info_X-1, _type='sum', factor=10**6) + 1)
+        
     if log:
         info_X = np.log2(info_X + 1)
     
@@ -220,7 +235,7 @@ def describe_gene_expression(data, log_scale=True, unit='count', log=False):
     plt.show()
     
 
-def do_scatterplot_2D(X, y, labels, xlabel=None, ylabel=None, dim1=0, dim2=1, legend=True, size=2, save_name=None):
+def do_scatterplot_2D(X, y, labels, xlabel=None, ylabel=None, dim1=0, dim2=1, legend=True, size=2, ticks=True, save_name=None):
     classes = np.unique(y)
     cmap = sns.color_palette(palette=cc.glasbey, n_colors=len(classes))
     
@@ -233,10 +248,39 @@ def do_scatterplot_2D(X, y, labels, xlabel=None, ylabel=None, dim1=0, dim2=1, le
         plt.xlabel(xlabel)
     if ylabel is not None:
         plt.ylabel(ylabel)
+    if not ticks:
+        plt.xticks(labels=[], ticks=[])
+        plt.yticks(labels=[], ticks=[])
     if save_name:
         plt.savefig(save_name, bbox_inches='tight', dpi=150)
     plt.show()
     
+    
+
+def plot_variables_in_boxes(X, feat_name, n_feat=10, method='max', save_name=None):
+    n_sample = X.shape[0]
+    plt.figure(figsize=(20, 3))
+    if method == 'max':
+        V = np.argsort(-np.max(X, axis=0))[:n_feat]
+    elif method == 'min':
+        V = np.argsort(np.max(X, axis=0))[:n_feat]
+    elif method == 'mean_abs_max':
+        V = np.argsort(-np.mean(np.abs(X), axis=0))[:n_feat]
+    elif method == 'mean_max':
+        V = np.argsort(-np.mean(X, axis=0))[:n_feat]
+    elif method == 'mean_min':
+        V = np.argsort(np.mean(X, axis=0))[:n_feat]
+    elif method == 'median_max':
+        V = np.argsort(-np.median(X, axis=0))[:n_feat]
+        print(-np.sort(-np.median(X, axis=0))[:n_feat])
+    elif method == 'median_min':
+        V = np.argsort(np.median(X, axis=0))[:n_feat]
+    sns.boxplot(x=[name for name in feat_name[V] for sample in range(n_sample)], y=[X[sample, v] for v in V for sample in range(n_sample)], order=[name for name in feat_name[V]])
+    plt.title(f"Values of the variables across samples (a point = a sample)")
+    plt.tick_params(axis='both', which='major', labelsize=11)
+    if save_name:
+        plt.savefig(save_name, bbox_inches='tight', dpi=150)
+    plt.show()
     
     
 def plot_box(data, xlabel=None, save_name=None):
@@ -251,20 +295,22 @@ def plot_box(data, xlabel=None, save_name=None):
     plt.show()
     
     
-def describe_random_individuals(data, log=True, log_scale=False, save_path=None, unit='log2(count+1)'):
+def describe_random_individuals(data, log=True, scale=False, log_scale=False, save_path=None, unit='log2(count+1)'):
     info_X, info_y = get_X_y(data)
     info_X = np.array(info_X)
     info_y = np.array(info_y)
+    
+    if scale:
+        info_X = np.log2(scale_data(2**info_X-1, _type='sum', factor=10**6) + 1)
+    if log:
+        info_X = np.log2(info_X+1)
 
     plt.figure(figsize=(15, 4))
 
     my_samples = {}
     for i in range(20):
         j = np.random.randint(info_X.shape[0])
-        if log:
-            my_samples[i] = np.log2(info_X[j]+1)
-        else:
-            my_samples[i] = info_X[j]
+        my_samples[i] = info_X[j]
 
     plt.boxplot(my_samples.values(), vert=True)
     if log_scale:

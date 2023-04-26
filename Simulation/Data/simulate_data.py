@@ -43,9 +43,9 @@ def generate_eta(n_pathway, sparsity, n_gene, case=None):
     eta = {}
     for p in range(n_pathway):
         # Define the underlying graph structure
-        if case == 1:
-            eta['P'+str(p)] = np.array([0.,] * 10 * p + [1.,] * 10 + [0.,] * 10 * (n_pathway-p-1)) * 5
-        elif case == 0:
+        if case != 0:
+            eta['P'+str(p)] = np.array([0.,] * case * p + [1.,] * case + [0.,] * case * (n_pathway - p - 1)) * 5
+        else:
             eta['P'+str(p)] = np.random.binomial(1, sparsity, size=[n_gene]) * 5.
             while np.sum(eta['P'+str(p)]) < 3:
                 eta['P'+str(p)] = np.random.binomial(1, sparsity, size=[n_gene]) * 5.
@@ -56,25 +56,68 @@ def generate_eta(n_pathway, sparsity, n_gene, case=None):
 
 
 def return_parameters(name):
-    n_class = 33
-    n_gene = 15000
-    proportion = None  # if None, generate a balanced number of samples per class
+    
+    # Number of classes and number of variables
+    if name in ['SIMU1', 'SIMU2']:
+        n_class = 33
+        n_gene = 15000
+    elif name in ['SimuB']:
+        n_class = 4
+        n_gene = 50000
+    elif name in ['SimuA',]:
+        n_class = 2
+        n_gene = 50000
+    elif name in ['SimuC',]:
+        n_class = 6
+        n_gene = 50000
+    elif name.split("_")[0] == "syn":
+        n_gene = 2000
+        if name.split("_")[1] == "g":
+            n_class = int(name.split("_")[2]) + 1
+        else:
+            n_class = 2
+    
+    # Distribution of the examples among the classes
+    if name.split("_")[0] == "syn" and name.split("_")[1] == "g" and name.split("_")[2] in ["5", "10"]:
+        if name.split("_")[2] == "5":
+            proportion = [1/10, 1/10, 1/10, 1/10, 1/10, 1/2]
+        elif name.split("_")[2] == "10":
+            proportion = [1/20, 1/20, 1/20, 1/20, 1/20, 1/20, 1/20, 1/20, 1/20, 1/20, 1/2]
+    else:
+        proportion = None  # if None, generate a balanced number of samples per class
+    
     alpha = {}
     
-    # General
+    # Number of pathways
     if name == 'SIMU1':
         n_pathway = 1500
-        for c in range(n_class):
-            alpha['C' + str(c)] = np.array([1.] * n_pathway)   # each pathway has a priori the same importance
     elif name == 'SIMU2':
         n_pathway = 3000
+    elif name in ['SimuA', 'SimuB', 'SimuC']:
+        n_pathway = 5000
+    elif name.split("_")[0] == "syn":
+        if name.split("_")[1] in ["g", "p"]:
+            n_pathway = 200
+        elif name.split("_")[1] == "t":
+            n_pathway = int(2000 / int(name.split("_")[2]))
     for c in range(n_class):
-        alpha['C' + str(c)] = np.array([1.] * n_pathway)
+        alpha['C' + str(c)] = np.array([1.] * n_pathway)  # each pathway has a priori the same importance
 
     # Number of overexpressed pathways
     useful_paths = []
     cls_gap = 2.
-    P = 37
+    if name in ['SIMU1', 'SIMU2']:
+        P = 37
+    elif name in ['SimuA', 'SimuB', 'SimuC']:
+        P = 500
+    elif name.split("_")[0] == "syn":
+        if name.split("_")[1] == "g":
+            P = 10
+        elif name.split("_")[1] == "t":
+            P = 1
+        elif name.split("_")[1] == "p":
+            P = int(name.split("_")[2])
+            
     useful_paths = {}
     for c in range(n_class):
         useful_paths['C' + str(c)] = []                
@@ -87,12 +130,18 @@ def return_parameters(name):
         alpha['C'+str(c)] = alpha['C'+str(c)] * 4.
         
     # Prior on gene distribution per pathway   
-    if name == 'SIMU1':
-        case = 1
+    if name in ['SIMU1', "SimuA", "SimuB", "SimuC"]:
+        case = 10
         sparsity = None
-    elif name == 'SIMU2':
+    elif name in ['SIMU2', ]:
         case = 0
         sparsity = 1 / n_gene * 10
+    elif name.split("_")[0] == "syn":
+        if name.split("_")[1] == "t":
+            case = int(name.split("_")[2])
+        else:
+            case = 10
+        sparsity = None
     
 
     # Drawn gene distribution per pathway
@@ -108,9 +157,13 @@ def return_parameters(name):
     for P in useful_genes.keys():
         print('Pathway', P, end='\r')
         validity = False
+        if case != 0:
+            min_prop = 0.1 / n_gene
+        else:
+            min_prop = 0.01
         while not validity:
-            if min(eta[P][useful_genes[P]]) >= 0.01:
-                validity = True
+            if min(eta[P][useful_genes[P]]) >= min_prop:
+                    validity = True
             else:
                 eta[P] = generate_eta(n_pathway, sparsity, n_gene, case=case)[P]
                 useful_genes[P] = np.argwhere(eta[P] != 0).reshape(-1)

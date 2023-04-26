@@ -24,17 +24,20 @@ argParser.add_argument("-n", "--name", type=str, help="dataset name")
 argParser.add_argument("-m", "--model", type=str, help="model name (LR, MLP, DiffuseLR, DiffuseMLP)")
 argParser.add_argument("--set", type=str, help="set (train or test)")
 argParser.add_argument("--gap", type=int, help="prediction gaps are computed every `gap` features removed", default=10)
+argParser.add_argument("--exp", type=int, help="experiment number", default=1)
 args = argParser.parse_args()
 name = args.name
 model_name = args.model
 set_name = args.set
 gap = args.gap
+exp = args.exp
 print('Model    ', model_name)
 
 
 # Path
 save_path = get_save_path(name, code_path)
 data_path = get_data_path(name)
+save_name = os.path.join(model_name, f"exp_{exp}")
 
 
 # Load a dataset
@@ -43,9 +46,11 @@ train_loader, test_loader, n_class, n_feat, class_name, feat_name, transform, n_
 
 # Load a model
 softmax = True
-model = load_model(model_name, n_feat, n_class, softmax, device, save_path)
-## Parameters
-checkpoint = torch.load(os.path.join(save_path, model_name, 'checkpoint.pt'))
+n_layer, n_hidden_feat = get_hyperparameters(name, model_name)
+model = load_model(model_name, n_feat, n_class, softmax, device, save_path, n_layer, n_hidden_feat)
+
+# Parameters
+checkpoint = torch.load(os.path.join(save_path, save_name, 'checkpoint.pt'))
 model.load_state_dict(checkpoint['state_dict'])
 model.eval()
 
@@ -56,7 +61,13 @@ assert compute_accuracy_from_model_with_dataloader(model, test_loader, transform
 
 
 # Baseline
-baseline = torch.zeros(1, n_feat).to(device)
+if name in ['BRCA', 'KIRC', 'SimuA', 'SimuB', 'SimuC']:
+    base_class = 1
+    studied_class = [0,]
+else:
+    base_class = None
+    studied_class = list(np.arange(n_class))
+baseline = get_baseline(train_loader, device, n_feat, transform, base_class)
 default_output = model(baseline).detach().cpu().numpy()
 
 
@@ -69,20 +80,64 @@ elif set_name == 'test':
 
 # Load the attribution scores
 XAI_method = "Integrated_Gradients"
-attr, y_pred, y_true, labels, features = load_attributions(XAI_method, os.path.join(save_path, model_name), set_name=set_name)
-## Normalize them
+attr, y_pred, y_true, labels, features = load_attributions(XAI_method, os.path.join(save_path, save_name), set_name=set_name)
+
+# Normalize them
 attr = scale_data(attr, _type='norm')
 
 
-# Prediction gap on unimportant features
-_type = 'unimportant'
-PGU = prediction_gap_with_dataloader(model, loader, transform, attr, n_class, _type, y_true, y_pred, gap)
-print('Average PGU', np.round(np.mean(PGU), 4))
-adj_PGU = PGU / (1 - default_output)
-print('Adjusted average PGU', np.round(np.mean(adj_PGU), 4))
+# Local prediction gap ...
+print("Local PGs")
 
+# ... on unimportant features
+PGU = prediction_gap_with_dataloader(model, loader, transform, attr, gap, baseline, studied_class, None, "unimportant", y_true, y_pred)
+print('Average PGU', np.round(np.mean(list(PGU.values())), 4) * 100)
+adj_PGU = {}
+for c in studied_class:
+    adj_PGU[c] = PGU[c] / (1 - default_output[0, c])
+print('Adjusted average PGU', np.round(np.mean(list(adj_PGU.values())), 4) * 100)
+
+# ... on important features
+PGI = prediction_gap_with_dataloader(model, loader, transform, attr, gap, baseline, studied_class, None, "important", y_true, y_pred)
+print('Average PGI', np.round(np.mean(list(PGI.values())), 4) * 100)
+
+# Save
+with open(os.path.join(save_path, save_name, "local_XAI.csv"), "w") as f:
+    f.write(f"PGU, {np.round(np.mean(list(PGU.values())), 4)}\n")
+    f.write(f"PGU_adjusted, {np.round(np.mean(list(adj_PGU.values())), 4)}\n")
+    f.write(f"PGI, {np.round(np.mean(list(PGI.values())), 4)}\n")
+    
+    
+# Global prediction gap ...
+print('\nGlobal PGs')
+# ... on unimportant features
+indices = get_features_order(attr, _type="increasing")
+PGU = prediction_gap_with_dataloader(model, loader, transform, attr, gap, baseline, studied_class, indices, None, y_true, y_pred)
+print('Average PGU', np.round(np.mean(list(PGU.values())), 4) * 100)
+adj_PGU = {}
+for c in studied_class:
+    adj_PGU[c] = PGU[c] / (1 - default_output[0, c])
+print('Adjusted average PGU', np.round(np.mean(list(adj_PGU.values())), 4) * 100)
 
 # Prediction gap on important features
-_type = 'important'
-PGI = prediction_gap_with_dataloader(model, loader, transform, attr, n_class, _type, y_true, y_pred, gap)
-print('Average PGI', np.round(np.mean(PGI), 4))
+indices = get_features_order(attr, _type="decreasing")
+PGI = prediction_gap_with_dataloader(model, loader, transform, attr, gap, baseline, studied_class, indices, None, y_true, y_pred)
+print('Average PGI', np.round(np.mean(list(PGI.values())), 4) * 100)
+
+
+# Prediction gap on random features
+PGRs = []
+for t in range(30):
+    indices = get_features_order(attr, _type="random")
+    PGR = prediction_gap_with_dataloader(model, loader, transform, attr, gap, baseline, studied_class, indices, None, y_true, y_pred)
+    PGRs.append(np.round(np.mean(list(PGR.values())), 4))
+print('Average PGR', np.round(np.mean(PGRs), 4) * 100)
+
+
+# Save
+with open(os.path.join(save_path, save_name, "global_XAI.csv"), "w") as f:
+    f.write(f"PGU, {np.round(np.mean(list(PGU.values())), 4)}\n")
+    f.write(f"PGU_adjusted, {np.round(np.mean(list(adj_PGU.values())), 4)}\n")
+    f.write(f"PGR, {np.round(np.mean(PGRs), 4)}\n")
+    f.write(f"PGI, {np.round(np.mean(list(PGI.values())), 4)}\n")
+    f.write(f"list_PGR, {PGRs}\n")

@@ -25,12 +25,10 @@ The datasets will be stored in a folder on your computer. Set the absolute path 
 #### TCGA data
 ##### PanCan
 To download the PanCan TCGA dataset [1], go to the Pancan/Data folder and execute `python get_pancan.py`.
-
 More details on the data are presented in two notebooks `Describe_tcga_data.ipynb` and `Discover_gene_expression_data.ipynb`.
 
 ##### BRCA and KIRC
 To download the BRCA and KIRC datasets, go to the Gdc/Data folder and execute `python get_gdc.py`.
-
 More details on the data are presented in two notebooks `Describe_gdc_tcga_data.ipynb` and `Discover_gdc_tcga_gene_expression_data.ipynb`.
 
 #### Simulation

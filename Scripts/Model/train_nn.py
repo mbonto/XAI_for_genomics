@@ -22,9 +22,11 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 argParser = argparse.ArgumentParser()
 argParser.add_argument("-n", "--name", type=str, help="dataset name")
 argParser.add_argument("-m", "--model", type=str, help="model name (LR, MLP, DiffuseLR, DiffuseMLP)")
+argParser.add_argument("--exp", type=int, help="experiment number", default=1)
 args = argParser.parse_args()
 name = args.name
 model_name = args.model
+exp = args.exp
 print('Model    ', model_name)
 
 
@@ -40,8 +42,9 @@ print(f"In our dataset, we have {n_class} classes and {n_sample} examples. Each 
 
 # Model
 softmax = False
-model = load_model(model_name, n_feat, n_class, softmax, device, save_path)
-save_name = os.path.join(model.name, "checkpoint.pt")
+n_layer, n_hidden_feat = get_hyperparameters(name, model_name)
+model = load_model(model_name, n_feat, n_class, softmax, device, save_path, n_layer, n_hidden_feat)
+save_name = os.path.join(model_name, f"exp_{exp}")
 
 
 # Optimization
@@ -73,11 +76,17 @@ print(f'The balanced test accuracy with our {model.name} is {np.round(test_balan
 correct_test_indices = np.argwhere(y_pred == y_true)
 ## Confusion matrix
 cm = get_confusion_matrix(y_true, y_pred, class_name, normalize='true')
-create_new_folder(os.path.join(save_path, model.name, "Figures"))
-plot_confusion_matrix(cm, file=os.path.join(save_path, model.name, "Figures", "confusion_matrix.png"), show=False)
+create_new_folder(os.path.join(save_path, save_name, "Figures"))
+plot_confusion_matrix(cm, file=os.path.join(save_path, save_name, "Figures", "confusion_matrix.png"), show=False)
 
 
 # Save
+with open(os.path.join(save_path, save_name, "accuracy.csv"), "w") as f:
+    f.write(f"train, {np.round(train_score, 2)}\n")
+    f.write(f"balanced_train, {np.round(train_balanced_score, 2)}\n")
+    f.write(f"test, {np.round(test_score, 2)}\n")
+    f.write(f"balanced_test, {np.round(test_balanced_score, 2)}\n")
+
 torch.save({'epoch': epoch+1,
             'arch': "{}".format(model.name),
             'variables': "{}".format(model.variables),
@@ -85,4 +94,4 @@ torch.save({'epoch': epoch+1,
             'train_acc': train_score,
             'test_acc': test_score,
             'correct_test_indices': correct_test_indices,
-            }, os.path.join(save_path, save_name))
+            }, os.path.join(save_path, save_name, "checkpoint.pt"))

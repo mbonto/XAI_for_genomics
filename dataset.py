@@ -18,6 +18,7 @@ def get_possible_classes(database, cancer):
                             'neoplasm_histologic_grade', 'primary_diagnosis.diagnoses']
     possible['gdc-OV'] = ['age_at_initial_pathologic_diagnosis', 'sample_type.samples',
                             'neoplasm_histologic_grade', 'primary_diagnosis.diagnoses']
+    possible['gdc-LUAD'] = ['sample_type.samples',]
     try:
         possible_classes = possible[f"{database}-{cancer}"]
     except:
@@ -36,8 +37,9 @@ def load_phenotype(data_path, database, cancer):
 def get_unwanted_labels(database, cancer):
     unwanted = {}
     unwanted['pancan-pancan'] = []
-    unwanted['gdc-BRCA'] = ['not reported', 'nan', 'stage x', 'MX', 'NX', 'TX']
+    unwanted['gdc-BRCA'] = ['not reported', 'nan', 'stage x', 'MX', 'NX', 'TX', 'Metastatic']
     unwanted['gdc-KIRC'] = ['Additional - New Primary']
+    unwanted['gdc-LUAD'] = ['FFPE Scrolls', 'Recurrent Tumor']
     try:
         unwanted_labels = unwanted[f"{database}-{cancer}"]
     except:

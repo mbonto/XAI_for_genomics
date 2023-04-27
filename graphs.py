@@ -1,5 +1,6 @@
 import numpy as np
 import scipy
+from scipy.sparse import csc_matrix, eye, issparse
 import networkx as nx
 from networkx.algorithms import community
 
@@ -114,13 +115,17 @@ def smoothness(G, signal):
 
 
 def get_degree_matrix(A):
-    return np.diag(1/np.sqrt(np.sum(A, axis=1)))
+    if issparse(A):
+        return eye(A.shape[0], A.shape[1]).multiply((1/np.sqrt(np.sum(A, axis=1))))
+    else:
+        return np.diag(1/np.sqrt(np.sum(A, axis=1)))
 
 
-def get_normalized_adjaceny_matrix(A, min_value):
-    A = np.maximum(0, A)
-    A = (A > min_value) * A
-    A = A + np.eye(A.shape[0])
+def get_normalized_adjaceny_matrix(A):
+    if issparse(A):
+        A = A + eye(A.shape[0], A.shape[1])
+    else:
+        A = A + np.eye(A.shape[0])
     D = get_degree_matrix(A)
-    A = D @ A @ D
+    A = D.dot(A).dot(D)
     return A

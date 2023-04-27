@@ -8,13 +8,11 @@ from torch_geometric.utils import dense_to_sparse
                         
 
     
-def load_model(model_name, n_feat, n_class, softmax, device, save_path):
+def load_model(model_name, n_feat, n_class, softmax, device, save_path, n_layer=None, n_hidden_feat=None):
     # Hyperparameters
     if model_name in ['LR', 'DiffuseLR']:
         dropout = 0.2
     elif model_name in ['MLP', 'DiffuseMLP']:
-        n_layer = 1
-        n_hidden_feat = 20
         batch_norm = True
         dropout = 0
     # Models

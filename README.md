@@ -42,11 +42,12 @@ In the following, the same commands can be used for various datasets and learnin
 - Various datasets can be used: PanCan TCGA (pancan), BRCA, KIRC, SIMU1/SIMU2, SimuA/SimuB/SimuC. 
 - Various models can be trained: logistic regression (LR), multilayer perceptron (MLP), diffusion + logistic regression (DiffuseLR), diffusion + multilayer perceptron (DiffuseMLP).
 
+Go to Scripts/Model.
 #### Graph
-To compute the correlation graph over all genes, execute `python infer_graph.py --name pancan`.
+To compute the correlation graph over all features, execute `python infer_graph.py --name pancan`.
 
 #### Model
-To train a logistic regression (LR) on TCGA data (pancan), go to Scripts/Model and execute `python train_nn.py -n pancan -m LR`.
+To train a logistic regression (LR) on TCGA data (pancan), execute `python train_nn.py -n pancan -m LR`.
 
 
 ### 4. Explainability

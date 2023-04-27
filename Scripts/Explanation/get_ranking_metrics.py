@@ -42,18 +42,18 @@ save_name = os.path.join(model_name, f"exp_{exp}")
 data = np.load(os.path.join(data_path, f'{name}.npy'), allow_pickle=True).item()
 studied_class = np.arange(data['n_class'])
 base_class = None
+if name in ['SimuB']:
+    studied_class = np.array([0, 1, 2])
+    base_class = 3
+elif name in ['SimuA',]:
+    studied_class = np.array([0,])
+    base_class = 1
+elif name in ['SimuC',]:
+    studied_class = np.array([0, 1, 2, 3, 4])
+    base_class = 5
 
 # Special case where several subclasses are inside a class: the subgroup labels need to be retrieved
 if name in ['SimuA', 'SimuB', 'SimuC'] or name[:5] == "syn_g":
-    if name in ['SimuB']:
-        studied_class = np.array([0, 1, 2])
-        base_class = 3
-    elif name in ['SimuA',]:
-        studied_class = np.array([0,])
-        base_class = 1
-    elif name in ['SimuC',]:
-        studied_class = np.array([0, 1, 2, 3, 4])
-        base_class = 5
     X = data['X']
     y = data['y']
     ## Create train/test sets
@@ -90,6 +90,9 @@ if name in ['SimuA', 'SimuB', 'SimuC'] or name[:5] == "syn_g":
             y_ori_train = y_true.copy()
         else:
             y_ori_test = y_true.copy()
+if name[:3] == "syn":
+    studied_class = np.arange(data["n_class"] - 1)
+    base_class = data["n_class"] - 1
 
 
 # Ground truth

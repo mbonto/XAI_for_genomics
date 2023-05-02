@@ -7,16 +7,14 @@ def get_url(data_path, database='gdc', cancer='pancan'):
     """Several databases are related to TCGA: TCGA Pan-Cancer (pancan), GDC TCGA, legacy TCGA. Here are the locations of the different sources. TCGA Pan-Cancer and GDC are directly retrieved from the GDC website. Legacy TCGA is retrived from the UCSC XENA browser.
     
     Parameters:
-        data_path  --  Path towards a folder containing a 'cancers' file listing all cancers studied in tcga.
+        data_path  --  Path towards a folder where the data will be stored.
         database  --  'pancan', 'gdc' or 'legacy'.
-        cancer  --  If database is 'gdc' or 'legacy', cancer is one of the cancers listed in 'cancers'.
+        cancer  --  If database is 'gdc' or 'legacy', cancer must be set to 'BRCA' or 'KIRC'.
                     If database is 'pancan', cancer must be set to 'pancan' (all types of cancers are selected).
     """
     assert database in ['pancan', 'gdc', 'legacy'], "'database' must be either 'pancan', 'gdc' or 'legacy'."
     if database == 'pancan':
         assert cancer == 'pancan', "All types of cancers are automatically selected when database = 'pancan'. 'cancer' must be set to 'pancan'."
-    else:
-        assert cancer in read_file(os.path.join(data_path, 'cancers')), f"'cancer' can only take one of the values listed in {os.path.join(data_path, 'cancers')}"
     url = {}
     url['pancan'] = {
         'phenotype': 'https://api.gdc.cancer.gov/data/1b5f413e-a8d1-4d10-92eb-7c4ae739ed81',

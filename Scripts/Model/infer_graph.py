@@ -44,4 +44,4 @@ A = csc_matrix(A)
 
 # Diffusion version
 D = get_normalized_adjaceny_matrix(A)
-save_npz(os.path.join(save_path, 'graph', f'diffusion'), A)
+save_npz(os.path.join(save_path, 'graph', f'diffusion'), D)

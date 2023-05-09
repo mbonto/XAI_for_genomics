@@ -11,10 +11,11 @@ from setting import *
 argParser = argparse.ArgumentParser()
 argParser.add_argument("-n", "--name", type=str, help="Dataset name")
 argParser.add_argument("-m", "--model", type=str, help="Model name (LR, MLP, DiffuseLR, DiffuseMLP)")
-argParser.add_argument("--n_repet", type=int, help="Results are averaged for all experiments between 1 and `n_repet`")
+argParser.add_argument("--n_repet", type=int, help="Results are averaged for all experiments between 1 and `n_repet`", default=10)
 args = argParser.parse_args()
 name = args.name
 model_name = args.model
+n_repet = args.n_repet
 print('Model    ', model_name)
 
 # Path

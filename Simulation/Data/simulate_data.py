@@ -1,11 +1,11 @@
 import numpy as np
 
 
-def generate_hierarchical_data(alpha, eta, n_sample, proportion=None):
+def generate_hierarchical_data(alpha, beta, n_sample, proportion=None):
     # Parameters
     n_class = len(alpha.keys())
-    n_pathway = len(eta.keys())
-    n_gene = len(eta[list(eta.keys())[0]])
+    n_pathway = len(beta.keys())
+    n_gene = len(beta[list(beta.keys())[0]])
     n_read = 1500000
     
     # Generate data
@@ -31,7 +31,7 @@ def generate_hierarchical_data(alpha, eta, n_sample, proportion=None):
             pathway = np.random.multinomial(n_read, class_to_path[sample])
             # For each read, draw a gene
             for p in range(n_pathway):
-                reads = np.random.multinomial(pathway[p], eta['P'+str(p)])
+                reads = np.random.multinomial(pathway[p], beta['P'+str(p)])
                 genes[sample] += reads
         genes /= (n_read/1000000)    
         X[count:count+n_sample_per_class, :] = genes
@@ -39,8 +39,9 @@ def generate_hierarchical_data(alpha, eta, n_sample, proportion=None):
     return X, y
 
 
-def generate_eta(n_pathway, sparsity, n_gene, case=None):
+def generate_eta_beta(n_pathway, sparsity, n_gene, case=None):
     eta = {}
+    beta = {}
     for p in range(n_pathway):
         # Define the underlying graph structure
         if case != 0:
@@ -50,13 +51,13 @@ def generate_eta(n_pathway, sparsity, n_gene, case=None):
             while np.sum(eta['P'+str(p)]) < 3:
                 eta['P'+str(p)] = np.random.binomial(1, sparsity, size=[n_gene]) * 5.
         # Attribute weights to each edge
+        beta['P'+str(p)] = np.zeros((n_gene))
         values = np.random.dirichlet(eta['P'+str(p)][eta['P'+str(p)]!=0], size=(1))
-        eta['P'+str(p)][eta['P'+str(p)]!=0] = values.reshape(-1)
-    return eta
+        beta['P'+str(p)][eta['P'+str(p)]!=0] = values.reshape(-1)
+    return eta, beta
 
 
 def return_parameters(name):
-    
     # Number of classes and number of variables
     if name in ['SIMU1', 'SIMU2']:
         n_class = 33
@@ -76,6 +77,9 @@ def return_parameters(name):
             n_class = int(name.split("_")[2]) + 1
         else:
             n_class = 2
+    elif name == "demo":
+        n_class = 2
+        n_gene = 12
     
     # Distribution of the examples among the classes
     if name.split("_")[0] == "syn" and name.split("_")[1] == "g" and name.split("_")[2] in ["5", "10"]:
@@ -100,6 +104,8 @@ def return_parameters(name):
             n_pathway = 200
         elif name.split("_")[1] == "t":
             n_pathway = int(2000 / int(name.split("_")[2]))
+    elif name == "demo":
+        n_pathway = 3
     for c in range(n_class):
         alpha['C' + str(c)] = np.array([1.] * n_pathway)  # each pathway has a priori the same importance
 
@@ -117,6 +123,8 @@ def return_parameters(name):
             P = 1
         elif name.split("_")[1] == "p":
             P = int(name.split("_")[2])
+    elif name == "demo":
+        P = 1
             
     useful_paths = {}
     for c in range(n_class):
@@ -142,31 +150,31 @@ def return_parameters(name):
         else:
             case = 10
         sparsity = None
+    elif name == "demo":
+        case = 4
+        sparsity = None
     
 
     # Drawn gene distribution per pathway
-    eta = generate_eta(n_pathway, sparsity, n_gene, case=case)
+    eta, beta = generate_eta_beta(n_pathway, sparsity, n_gene, case=case)
 
     # Store important genes
     useful_genes = {}
     for c in range(n_class):
         for P in (useful_paths["C" + str(c)]):
-            useful_genes[P] = np.argwhere(eta[P] != 0).reshape(-1)
+            useful_genes[P] = np.argwhere(beta[P] != 0).reshape(-1)
 
-    # Check validity (useful genes must have a drawing probability higher than 0.01)
+    # Check validity (useful genes must have a drawing probability relatively high)
     for P in useful_genes.keys():
         print('Pathway', P, end='\r')
         validity = False
-        if case != 0:
-            min_prop = 0.1 / n_gene
-        else:
-            min_prop = 0.01
+        min_prop = 0.1 / n_gene
         while not validity:
-            if min(eta[P][useful_genes[P]]) >= min_prop:
+            if min(beta[P][useful_genes[P]]) >= min_prop:
                     validity = True
             else:
-                eta[P] = generate_eta(n_pathway, sparsity, n_gene, case=case)[P]
-                useful_genes[P] = np.argwhere(eta[P] != 0).reshape(-1)
+                eta[P], beta[P] = generate_eta_beta(n_pathway, sparsity, n_gene, case=case)[P]
+                useful_genes[P] = np.argwhere(beta[P] != 0).reshape(-1)
             
-    return alpha, eta, proportion, n_gene, n_pathway, n_class, useful_paths, useful_genes
+    return alpha, eta, beta, proportion, n_gene, n_pathway, n_class, useful_paths, useful_genes
 

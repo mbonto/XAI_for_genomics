@@ -64,6 +64,8 @@ To compute the feature agreement metrics on simulated data, execute `python get_
 
 ## Results
 ### 1. Datasets
+For more details, please have a look at the scientific articles.
+
 |  Name  | # classes | # samples (max / min per class)  | # variables |
 |:---------:|:-----------:|:------------------------------------------:|:--------------:|
 | pancan |      33      |               9680 (1095 / 36)               |     16335     |
@@ -74,7 +76,6 @@ To compute the feature agreement metrics on simulated data, execute `python get_
 | SimuA |       2       |                     1200 (600)                    |     50000     |
 | SimuB |       2       |                 1200 (900 / 300)              |     50000     |
 | SimuC |       2       |               1200 (1000 / 200)              |     50000     |
-For more details, please have a look at the scientific articles.
 
 ### 2. Learning
 Each model is trained 10 times with a different random initialisation. The reported results are the averages and standard deviations obtained with the 10 learned models.

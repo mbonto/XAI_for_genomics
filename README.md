@@ -44,7 +44,8 @@ In the following, the same commands can be used for various datasets and learnin
 
 Go to Scripts/Model.
 #### Graph
-To compute the correlation graph over all features, execute `python infer_graph.py --name pancan`.
+To compute the correlation graph over all features using training examples, execute `python infer_graph.py -n pancan --min_value 0.5`.
+All correlations whose absolute value is lower than `min_value` are set to 0.
 
 #### Model
 To train a logistic regression (LR) on TCGA data (pancan), execute `python train_nn.py -n pancan -m LR`.
@@ -60,6 +61,60 @@ To compute the prediction gaps (PGs), execute `python get_prediction_gaps.py -n 
 To compute the curves, execute `python get_attributions_averaged_per_class.py -n pancan -m LR --set test` followed by `python get_curves.py -n pancan -m LR --set test --simu 100`.
 
 To compute the feature agreement metrics on simulated data, execute `python get_ranking_metrics.py -n SIMU1 -m LR --set test`. To compute the diffused feature agreement metrics on simulated data, execute `python get_ranking_metrics.py -n SIMU1 -m LR --set test --diffusion`.
+
+## Results
+### 1. Datasets
+|  Name  | # classes | # samples (max / min per class)  | # variables |
+|:---------:|:-----------:|:------------------------------------------:|:--------------:|
+| pancan |      33      |               9680 (1095 / 36)               |     16335     |
+|   BRCA  |       2       |               1210 (1097 / 113)             |     58274     |
+|   KIRC   |       2       |                 606 (534 / 72)                  |     58233     |
+| SIMU1 |      33      |                    9900 (300)                    |     15000     |
+| SIMU2 |      33      |                     9900 (300)                   |     15000     |
+| SimuA |       2       |                     1200 (600)                    |     50000     |
+| SimuB |       2       |                 1200 (900 / 300)              |     50000     |
+| SimuC |       2       |               1200 (1000 / 200)              |     50000     |
+For more details, please have a look at the scientific articles.
+
+### 2. Learning
+Each model is trained 10 times with a different random initialisation. The reported results are the averages and standard deviations obtained with the 10 learned models.
+
+**Logistic regression (LR)**
+|  Name  | Training accuracy (%) | Balanced test accuracy (%)  | 
+|:---------:|:---------------------------:|:------------------------------------:|
+| pancan |          100 +- 0.0          |                93.7 +- 0.4                |
+|   BRCA  |          100 +- 0.0          |                96.6 +- 0.3                |
+|   KIRC   |          100 +- 0.0          |                98.7 +- 0.2                |
+| SIMU1 |          100 +- 0.0          |                99.8 +- 0.1                |
+| SIMU2 |          100 +- 0.0          |                99.6 +- 0.1                |
+| SimuA  |          100 +- 0.0          |                100 +- 0.0                |
+| SimuB  |          100 +- 0.0          |                100 +- 0.0                |
+| SimuC  |          100 +- 0.0          |                100 +- 0.0                |
+
+**Multilayer perceptron (MLP)**
+|  Name  | Training accuracy (%) | Balanced test accuracy (%)  | 
+|:---------:|:---------------------------:|:------------------------------------:|
+| pancan |          100 +- 0.0          |                94.5 +- 0.3                |
+|   BRCA  |          100 +- 0.0          |                99.6 +- 0.0                |
+|   KIRC   |          99.7 +- 0.2          |                99.6 +- 0. 7               |
+| SIMU1 |          100 +- 0.0          |                99.9 +- 0.0                |
+| SIMU2 |          100 +- 0.0          |                99.6 +- 0.1                |
+| SimuA  |          100 +- 0.0          |                100 +- 0.0                |
+| SimuB  |          100 +- 0.0          |                100 +- 0.0                |
+| SimuC  |          100 +- 0.0          |                100 +- 0.0                |
+
+### 3. Explaining
+The scores attributed to the variables are computed with integrated gradients for each example. The importance of the value of a variable for a prediction is computed with respect to a default prediction on a reference example (called baseline). 
+|  Name  |            Baseline            |     Studied classes      | 
+|:---------:|:---------------------------:|:--------------------------:|
+| pancan |          Null vector          |                All                |
+|   BRCA  | Average of the normal samples used for training | Tumour samples |
+|   KIRC   | Average of the normal samples used for training | Tumour samples |
+| SIMU1 |          Null vector          |                All                |
+| SIMU2 |          Null vector          |                All                |
+| SimuA  | Average of the class 1 samples used for training | Class 0 samples |
+| SimuB  | Average of the class 1 samples used for training | Class 0 samples |
+| SimuC  | Average of the class 1 samples used for training | Class 0 samples |
 
 ## References
 [1] The data come from the [TCGA Research Network](https://www.cancer.gov/tcga).

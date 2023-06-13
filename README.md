@@ -59,7 +59,7 @@ To compute the prediction gaps (PGs), execute `python get_prediction_gaps.py -n 
 
 To compute the curves, execute `python get_attributions_averaged_per_class.py -n pancan -m LR --set test` followed by `python get_curves.py -n pancan -m LR --set test --simu 100`.
 
-To compute the feature agreement metrics on simulated data, execute `get_ranking_metrics.py -n SIMU1 -m LR`. To compute the diffused feature agreement metrics on simulated data, execute `get_ranking_metrics.py -n SIMU1 -m LR --diffusion`.
+To compute the feature agreement metrics on simulated data, execute `python get_ranking_metrics.py -n SIMU1 -m LR --set test`. To compute the diffused feature agreement metrics on simulated data, execute `python get_ranking_metrics.py -n SIMU1 -m LR --set test --diffusion`.
 
 ## References
 [1] The data come from the [TCGA Research Network](https://www.cancer.gov/tcga).

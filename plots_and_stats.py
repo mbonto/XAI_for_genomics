@@ -5,7 +5,10 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 import os
 import colorcet as cc
-from loader import get_X_y, scale_data
+import math
+import random
+import networkx as nx
+from loader import transform_data
 
 
 def describe_dataset(data):
@@ -61,13 +64,9 @@ def describe_dataloader(data_loader):
 
 
 
-def plot_random_gene_expression(data, group_by_classes=True, gene_index=None, log_scale=False, log=False, scale=False, unit='count'):
-    info_X, info_y = get_X_y(data)    
-    info_X = np.array(info_X)
-    info_y = np.ravel(np.array(info_y))
-    
+def plot_random_gene_expression(data, info_X, info_Y, group_by_classes=True, gene_index=None, log_scale=False, log=False, scale=False, unit='count'):
     if scale:
-        info_X = np.log2(scale_data(2**info_X-1, _type='sum', factor=10**6) + 1)
+        info_X = np.log2(transform_data(2**info_X-1, transform='divide_by_sum', factor=10**6) + 1)
     
     if log:
         info_X = np.log2(info_X + 1)
@@ -98,7 +97,7 @@ def plot_random_sample_expression(data, log=False, unit='count', index=None, sca
         index = np.random.randint(0, len(data))
     ID = data.sample_IDs[index]
     if scale:
-        sample = scale_data((2**data.expression.loc[ID].values-1).reshape(1, -1), _type='sum', factor=10**6).reshape(-1)
+        sample = transform_data((2**data.expression.loc[ID].values-1).reshape(1, -1), transform='divide_by_sum', factor=10**6).reshape(-1)
         plt.plot(np.log2(sample + 1), '.')
     elif log:
         plt.plot(np.log2(data.expression.loc[ID].values + 1), '.')
@@ -109,13 +108,9 @@ def plot_random_sample_expression(data, log=False, unit='count', index=None, sca
     plt.title("Gene expression in a random sample.")         
         
 
-def plot_stats_on_gene_expression(data, criteria='average', log_scale=False, log=False, scale=False, unit='count'):
-    info_X, info_y = get_X_y(data) 
-    info_X = np.array(info_X)
-    info_y = np.array(info_y)
-    
+def plot_stats_on_gene_expression(data, info_X, info_Y, criteria='average', log_scale=False, log=False, scale=False, unit='count'):    
     if scale:
-        info_X = np.log2(scale_data(2**info_X-1, _type='sum', factor=10**6) + 1)
+        info_X = np.log2(transform_data(2**info_X-1, transform='divide_by_sum', factor=10**6) + 1)
     
     if log:
         info_X = np.log2(info_X + 1)
@@ -149,13 +144,9 @@ def plot_stats_on_gene_expression(data, criteria='average', log_scale=False, log
     plt.xlabel(f"{criteria.capitalize()} expression per locus ({unit})")
     
     
-def sort_genes(data, criteria='average', log_scale=False, scale=False, unit='count'):
-    info_X, info_y = get_X_y(data)
-    info_X = np.array(info_X)
-    info_y = np.array(info_y)
-    
+def sort_genes(data, info_X, info_Y, criteria='average', log_scale=False, scale=False, unit='count'):
     if scale:
-        info_X = np.log2(scale_data(2**info_X-1, _type='sum', factor=10**6) + 1)
+        info_X = np.log2(transform_data(2**info_X-1, transform='divide_by_sum', factor=10**6) + 1)
     
     if criteria == 'average':
         info_X = np.mean(info_X, axis=0)
@@ -194,13 +185,9 @@ def plot_class_imbalance(data, label_name, save_path=None):
     plt.show()
     
 
-def describe_gene_expression(data, log_scale=True, unit='count', log=False, scale=False):
-    info_X, info_y = get_X_y(data)
-    info_X = np.array(info_X)
-    info_y = np.array(info_y)
-    
+def describe_gene_expression(data, info_X, info_Y, log_scale=True, unit='count', log=False, scale=False):
     if scale:
-        info_X = np.log2(scale_data(2**info_X-1, _type='sum', factor=10**6) + 1)
+        info_X = np.log2(transform_data(2**info_X-1, transform='divide_by_sum', factor=10**6) + 1)
         
     if log:
         info_X = np.log2(info_X + 1)
@@ -295,13 +282,9 @@ def plot_box(data, xlabel=None, save_name=None):
     plt.show()
     
     
-def describe_random_individuals(data, log=True, scale=False, log_scale=False, save_path=None, unit='log2(count+1)'):
-    info_X, info_y = get_X_y(data)
-    info_X = np.array(info_X)
-    info_y = np.array(info_y)
-    
+def describe_random_individuals(data, info_X, info_Y, log=True, scale=False, log_scale=False, save_path=None, unit='log2(count+1)'):
     if scale:
-        info_X = np.log2(scale_data(2**info_X-1, _type='sum', factor=10**6) + 1)
+        info_X = np.log2(transform_data(2**info_X-1, transform='divide_by_sum', factor=10**6) + 1)
     if log:
         info_X = np.log2(info_X+1)
 
@@ -323,54 +306,215 @@ def describe_random_individuals(data, log=True, scale=False, log_scale=False, sa
     plt.show()
     
 
-def plot_draw_from_Dirichlet(alpha, sparse=False, label_distrib='Class', label_var='Pathway'):
+def draw_from_Dirichlet(param):
     '''
-    Draw an observation from a Dirichlet distribution. 
-    Parameter:
-       alpha  --  dict, for each key, contains a vector used to parameterized a Dirichlet distribution.
+    Draw a realisation of a Dirichlet distribution parametrized by `param`.
+    
+    Parameters:
+        param  --  np vector, used to parametrized the Dirichlet distribution.
+    '''
+    print(f"    Parameter of the Dirichlet distribution: {param}")
+    r = param.copy()
+    values = np.random.dirichlet(r[r!=0])
+    r[r!=0] = values
+    print(f"    Realisation: {values / np.sum(values)}")
+    return r
+
+
+
+def draws_from_Dirichlet(dict_param, label_key):
+    '''
+    Draw the realisations of sevral Dirichlet distributions parametrized by the parameters in `dict_param`.
+    
+    Parameters:
+        dict_param  --  dict. dict[key] contains a vector used to parametrized a Dirichlet distribution.
+        label_key  --  str, name of the keys represented by each parameter vector.
+    '''
+    r = {}
+    # For each param in dict_param, draw a realisation r
+    for c, key in enumerate(dict_param.keys()):
+        print(f'{label_key} {key}')
+        r[key] = draw_from_Dirichlet(dict_param[key])
+    return r
+
+
+def plot_draws_from_Dirichlet(dict_real, label_key, label_var, save_name):
+    '''
+    Plot the realisations of Dirichlet distributions in a barplot.
+    
+    Parameters:
+        dict_real  --  dict. dict_real[key] contains a draw from a Dirichlet distribution.
+        label_key  --  str, name of the keys represented by each parameter vector.
+        label_var  --  str, name of the variables represented by the values of the parameter vector.
+        save_name  -- str or None, path where the plot will be stored.
     '''
     # Parameters
-    n_draw = len(alpha)
-    n_var = len(alpha[list(alpha.keys())[0]])
-    # Definition of the colors used for the plot
-    if n_var < 4:
-        colors = ['violet', 'royalblue', 'springgreen']
-    else:
-        cmap = cm.get_cmap('viridis', n_var)
-        colors = np.arange(n_var)
-        np.random.seed(0)
-        np.random.shuffle(colors)
-        np.random.seed()
-        colors = [cmap(c) for c in list(colors)]
-    # For each distribution...
+    n_var = 0
+    for key in dict_real.keys():
+        n_var = max(n_var, len(dict_real[key]))
+    
+    # Colors attributed to each variable
+    cmap = cm.get_cmap('viridis', n_var)
+    colors = np.arange(n_var)
+    np.random.seed(0)
+    np.random.shuffle(colors)
+    np.random.seed()
+    colors = [cmap(c) for c in list(colors)]
+    
+    # Figure
     fig, ax = plt.subplots()
-    for c, draw in enumerate(alpha.keys()):
-        # ...Get data
-        if not sparse:
-            data = np.random.dirichlet(alpha[draw])
-            print(f"{label_distrib} {c}: {alpha[draw] / np.sum(alpha[draw])}")
-        else:
-            data = alpha[draw].copy()
-            values = np.random.dirichlet(np.ones(np.sum([alpha[draw]!=0])))
-            data[data!=0] = values
-            print(f"{label_distrib} {c}: {data}")
-        # ...Plot
-        if c == 0:
-            ax.barh(c, data[0], label=f'{label_var} 0', color=colors[0])
-        else:
-            ax.barh(c, data[0], color=colors[0])
-        bottom = data[0]
-        for p in range(1, n_var):
-            if c == 0:
-                ax.barh(f'{label_distrib} {c}', data[p], left=bottom, label=f'{label_var} {p}', color=colors[p])
-            else:
-                ax.barh(f'{label_distrib} {c}', data[p], left=bottom, color=colors[p])
-            bottom += data[p]
+    # For each param in dict_param...
+    for c, key in enumerate(dict_real.keys()):
+        # Get a realisation r...
+        r = dict_real[key]
+        # Create a barplot, band by band
+        label = f'{label_var} {0}' if c==0 else None
+        ax.barh(f'{label_key} {c}', r[0], color=colors[0], label=label)
+        bottom = r[0]
+        for var in range(1, n_var):
+            label = f'{label_var} {var}' if c==0 else None
+            ax.barh(f'{label_key} {c}', r[var], left=bottom, color=colors[var], label=label)
+            bottom += r[var]
+    # Legend
     ax.set_ylabel('Proportions')
     ax.set_xticklabels([])
     ax.invert_yaxis()
     if n_var < 5:
         ax.legend()
+    if save_name is not None:
+        plt.savefig(save_name, bbox_inches='tight')
     plt.show()
 
 
+def plot_average_signals(X, y, n_variable=None, save_name=None):
+    n_class = len(np.unique(y))
+    colors = sns.color_palette(None, n_class)
+    plt.figure(figsize=(10, 1))
+    for c in range(n_class):
+        mean = np.mean(X[y==c], axis=0)
+        std = np.std(X[y==c], axis=0)
+        plt.errorbar(np.arange(len(mean))[:n_variable], mean[:n_variable], yerr=std[:n_variable], color=colors[c], label=f"class {c}")
+    plt.xlabel("Variables")
+    plt.ylabel("Values")
+    plt.legend(ncol=math.ceil(n_class/2), loc='upper center', bbox_to_anchor=(0.5, 1.7), fancybox=True, shadow=False)
+    if save_name is not None:
+        plt.savefig(save_name, bbox_inches='tight')
+    plt.show()
+    
+    
+def plot_random_signals(X, y, n_sample_per_class=1, n_variable=None, save_name=None, legend=True):
+    n_class = len(np.unique(y))
+    colors = sns.color_palette(None, n_class)
+    count_per_class = np.zeros(n_class)
+    plt.figure(figsize=(10, 1))
+    indices = np.arange(X.shape[0])
+    random.shuffle(indices)
+    i = 0
+    while np.sum(count_per_class) != n_sample_per_class * n_class and i != X.shape[0]:
+        if count_per_class[y[indices[i]]] < n_sample_per_class:
+            if count_per_class[y[indices[i]]] == 0:
+                label = f"class {y[indices[i]]}"
+            else:
+                label = None
+            plt.plot(X[indices[i], :n_variable], color=colors[y[indices[i]]], label=label)
+            count_per_class[y[indices[i]]] += 1
+        i += 1
+    plt.xlabel("Variables")
+    plt.ylabel("Values")
+    if legend:
+        plt.legend(ncol=math.ceil(n_class/2), loc='upper center', bbox_to_anchor=(0.5, 1.7), fancybox=True, shadow=False)
+    if save_name is not None:
+        plt.savefig(save_name, bbox_inches='tight')
+    plt.show()
+    
+
+    
+def print_average_signals(X, y, var_list=[0, 1, 2]):
+    n_class = len(np.unique(y))
+    print(f"Average signals +- standard deviations for variables in {var_list}")
+    for c in range(n_class):
+        mean = np.mean(X[y==c], axis=0)
+        std = np.std(X[y==c], axis=0)
+        print(f"    Class {c}  - {np.round(mean[var_list])}  +-  {np.round(std[var_list])}")
+        
+
+def plot_matrix(A, xlabel, ylabel, save_name=None):
+    plt.matshow(A)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.colorbar()
+    if save_name is not None:
+        plt.savefig(save_name, bbox_inches='tight')
+    plt.show()
+
+
+def draw_a_graph_representing_data_simulated_with_LDA(n_class, n_pathway, n_gene, alpha, eta, node_size=10, font_size=1, save_name=None):
+    # Nx graph
+    G = nx.Graph()
+    pos = {}
+
+    # Nodes
+    center = ((n_class+1)%2)/2
+    for c in range(n_class):
+        G.add_node('class_' + str(c))
+        pos['class_' + str(c)] = [(- int(n_class / 2) + c + center)*5, 2]
+
+    center = - ((n_pathway+1)%2)/2
+    for p in range(n_pathway):
+        G.add_node('path_' + str(p))
+        pos['path_' + str(p)] = [(- int(n_pathway / 2) + p + center)*5, 1]
+
+    center = - (n_gene%2)/2
+    for g in range(n_gene):
+        G.add_node('G_' + str(g))
+
+    # Edges
+    for c in range(n_class):
+        for p in range(n_pathway):
+            G.add_edge('class_' + str(c), 'path_' + str(p), weight=alpha['C'+str(c)][p]/100) 
+    for p in range(n_pathway):
+        for g in range(n_gene):
+            G.add_edge('path_' + str(p), 'G_' + str(g), weight=eta['P'+str(p)][g]/np.sum(eta['P'+str(p)])) 
+
+    # Position
+    weight = {}
+    for p in range(n_pathway):
+        weight[str(p)] = []
+        pos[str(p)] = []
+        for g in range(n_gene):
+            weight[str(p)].append(G['G_' + str(g)]['path_' + str(p)]['weight'])
+        weight[str(p)] = np.array(weight[str(p)])
+
+    set1 = set(list(np.argwhere(weight[str(0)] != 0).reshape(-1)))
+    set2 = set(list(np.argwhere(weight[str(1)] != 0).reshape(-1)))
+    set3 = set(list(np.argwhere(weight[str(2)] != 0).reshape(-1)))
+    inter12 = set1.intersection(set2)
+    inter13 = set1.intersection(set3).difference(inter12)
+    inter23 = set2.intersection(set3).difference(inter13)
+    tot = set(np.arange(n_gene))
+    tot = tot.difference(set1)
+    tot = tot.difference(set2)
+    tot = tot.difference(set3)
+    order = list(set1 - inter12 - inter13) + list(inter12) + list(inter13) + list(set2 - inter12 - inter13 - inter23) + list(inter23) + list(set3 - inter12 - inter13 - inter23) + list(tot)
+
+    center = - ((n_gene+1)%2)/2
+    for i, g in enumerate(order):
+        pos['G_' + str(g)] = [- int(n_gene / 2) + i + center, 0]
+        
+    # Labels
+    labels = {}
+    for item in list(G.nodes):
+        labels[item] = item
+    
+    # Draw
+    plt.figure(figsize=(13, 3))
+    nx.draw_networkx_nodes(G, pos, node_size=node_size, node_color='lightgreen')
+    widths = nx.get_edge_attributes(G, 'weight')
+    nx.draw_networkx_edges(G, pos, edgelist=widths.keys(), width=list(widths.values()))
+    nx.draw_networkx_labels(G, pos, labels, font_size=font_size, font_color='purple')
+    
+    if save_name:
+        plt.savefig(save_name, bbox_inches='tight', dpi=150)
+        
+    plt.show()
+    

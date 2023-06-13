@@ -33,6 +33,7 @@ set_name = args.set
 n_simu = args.simu
 exp = args.exp
 print('Model    ', model_name)
+XAI_method = "Integrated_Gradients"
 
 
 # Path
@@ -42,7 +43,7 @@ save_name = os.path.join(model_name, f"exp_{exp}")
 
 
 # Dataset
-train_loader, test_loader, n_class, n_feat, class_name, feat_name, transform, n_sample = load_dataloader(data_path, name, device, batch_size=32)
+train_loader, test_loader, n_class, n_feat, class_name, feat_name, transform, n_sample = load_dataloader(data_path, name, device)
 if set_name == "train":
     loader = train_loader
 elif set_name == "test":
@@ -50,12 +51,7 @@ elif set_name == "test":
 
 
 # Baseline
-if name in ['BRCA', 'KIRC', 'SimuA', 'SimuB', 'SimuC']:
-    base_class = 1
-    studied_class = [0,]
-else:
-    base_class = None
-    studied_class = list(np.arange(n_class))
+base_class, studied_class = get_XAI_hyperparameters(name, n_class)
 baseline = get_baseline(train_loader, device, n_feat, transform, base_class)
 
 
@@ -69,8 +65,7 @@ model.eval()
     
 
 # Attributions
-XAI_method = "Integrated_Gradients"
-attr, y_pred, y_true, labels, features = load_attributions(XAI_method, os.path.join(save_path, save_name), set_name=set_name)
+attr, y_pred, y_true, labels, features, baseline, _ = load_attributions(XAI_method, os.path.join(save_path, save_name, XAI_method), set_name=set_name)
 
 
 # Store all examples in a tensor
@@ -109,7 +104,7 @@ X = X[correct_indices]
 assert (Y.cpu().numpy() == y_true).all()
 
 # Normalize
-attr = scale_data(attr, _type='norm')
+attr = transform_data(attr, transform='divide_by_norm')
 
 
 # Attributions averaged per class
@@ -161,11 +156,11 @@ results = {
     'res_cls_worst': res_cls_worst,
     'res_rand_wo_cls_best': res_rand_wo_cls_best,
 }
-np.save(os.path.join(save_path, save_name, "Curves_on_{}_with_{}.npy".format(set_name, XAI_method)), results)
+np.save(os.path.join(save_path, save_name, XAI_method, "figures", "Curves_on_{}_with_{}.npy".format(set_name, XAI_method)), results)
 
 
 # Plot
-save_file = os.path.join(save_path, save_name, 'Figures', f'Curves_on_{set_name}_with_{XAI_method}.png')
+save_file = os.path.join(save_path, save_name, XAI_method, 'figures', f'Curves_on_{set_name}_with_{XAI_method}.png')
 xlabel = "Number of features kept"
 ylabel = "Balanced accuracy (%)"
 plot_TCGA_results(results, xlabel, ylabel, save_file, show=False)

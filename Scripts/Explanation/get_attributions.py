@@ -30,6 +30,7 @@ n_step = args.step
 set_name = args.set
 exp = args.exp
 print('Model    ', model_name)
+XAI_method = "Integrated_Gradients"
 
 
 # Path
@@ -37,8 +38,9 @@ save_path = get_save_path(name, code_path)
 data_path = get_data_path(name)
 save_name = os.path.join(model_name, f"exp_{exp}")
 
+
 # Dataset
-train_loader, test_loader, n_class, n_feat, class_name, feat_name, transform, n_sample = load_dataloader(data_path, name, device, batch_size=32)
+train_loader, test_loader, n_class, n_feat, class_name, feat_name, transform, n_sample = load_dataloader(data_path, name, device)
 
 
 # Set
@@ -63,35 +65,21 @@ assert compute_accuracy_from_model_with_dataloader(model, test_loader, transform
 
 
 # Baseline
-if name in ['BRCA', 'KIRC', 'SimuA', 'SimuB', 'SimuC']:
-    base_class = 1
-    studied_class = [0,]
-else:
-    base_class = None
-    studied_class = list(np.arange(n_class))
+base_class, studied_class = get_XAI_hyperparameters(name, n_class)
 baseline = get_baseline(train_loader, device, n_feat, transform, base_class)
-print(f"The output of the baseline is {model(baseline)}")
+baseline_pred = model(baseline)
+print(f"The output of the baseline is {baseline_pred}")
 
     
-# Integrated gradients
-valid = False
-while not valid:
-    XAI_method = "Integrated_Gradients"
-    attr, y_true, y_pred = compute_attributes_from_a_dataloader(model, loader, transform, device, studied_class, XAI_method, n_step, baseline=baseline)
-    # With Integrated_Gradients, for each input, the sum of the attributions should be equal to model(input) - model(baseline).
-    # Otherwise, increase the number of steps (n_steps).
-    save = os.path.join(save_path, save_name, "Figures", f"IG_check_{set_name}.png")
-    ## indices = np.argwhere(y_true == y_pred)
-    score = check_ig_from_a_dataloader(attr, model, loader, transform, device, baseline, studied_class, save, show=False)
-    
-    if score > 1:
-        n_step = n_step + 5000
-        print(f"Maximal gap: {np.round(score, 6)}. There is at least one sample for which the difference between the sum of the attributions and the predictions is higher than 1. Run again IG with {n_step} steps.")
-    else:
-        valid = True
-        print(f"Maximal gap: {np.round(score, 6)}.")
-    
+# XAI_method
+save_name = os.path.join(save_name, XAI_method)
+create_new_folder(os.path.join(save_path, save_name, "figures"))
+attr, y_true, y_pred = compute_attributes_from_a_dataloader(model, loader, transform, device, studied_class, XAI_method, n_step, baseline=baseline)
+# With Integrated_Gradients, for each input, the sum of the attributions should be equal to model(input) - model(baseline).
+score = check_ig_from_a_dataloader(attr, model, loader, transform, device, baseline, studied_class, os.path.join(save_path, save_name, "figures", f"IG_check_{set_name}.png"), show=False)
+print(f"Maximal gap: {np.round(score, 6)}.")
+
 
 # Save
-save_attributions(attr, None, model, XAI_method, y_pred, y_true, np.arange(n_class), os.path.join(save_path, save_name), set_name)
+save_attributions(attr, feat_name, model, XAI_method, y_pred, y_true, baseline.cpu().numpy(), baseline_pred.detach().cpu().reshape(-1).tolist(), np.arange(n_class), os.path.join(save_path, save_name), set_name)
 print(' ')

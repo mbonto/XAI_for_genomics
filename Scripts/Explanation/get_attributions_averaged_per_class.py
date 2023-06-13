@@ -23,15 +23,15 @@ model_name = args.model
 set_name = args.set
 exp = args.exp
 print('Model    ', model_name)
+XAI_method = "Integrated_Gradients"
 
 
 # Path
 save_path = get_save_path(name, code_path)
-save_name = os.path.join(model_name, f"exp_{exp}")
+save_name = os.path.join(model_name, f"exp_{exp}", XAI_method)
 
 # Attributions
-XAI_method = "Integrated_Gradients"
-attr, y_pred, y_true, labels, features = load_attributions(XAI_method, os.path.join(save_path, save_name), set_name=set_name)
+attr, y_pred, y_true, labels, features, baseline, _ = load_attributions(XAI_method, os.path.join(save_path, save_name), set_name=set_name)
 correct_indices = np.argwhere((y_pred - y_true) == 0)[:, 0]
 print("There are {} uncorrect examples. We remove them from our study.".format(len(y_pred) - len(correct_indices)))
 attr = attr[correct_indices]
@@ -39,7 +39,7 @@ y_true = y_true[correct_indices]
 y_pred = y_pred[correct_indices]
 
 # Normalize
-attr = scale_data(attr, _type='norm')
+attr = transform_data(attr, transform='divide_by_norm')
 
 
 # Attributions averaged per class

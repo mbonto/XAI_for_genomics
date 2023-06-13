@@ -511,25 +511,102 @@ def prediction_gap_for_an_example(model, x, y, transform, attr, gap, baseline, i
 
 def get_features_order(attr, _type="increasing"):
     """Return an array containing the indices of the n_feat features of `attr` ranked in a certain order. The order is either
-    computed from the sum of the values of the n_sample examples ("increasing" or "decreasing"), or from the sum of the rank
-    of the values of the features in each example ("rank_increasing" or "rank_decrasing"). The rank can also be "random".
+    computed from the sum of the values of the n_sample examples ("sum_increasing" or "sum_decreasing"), from the sum of the rank of
+    the values of the features in each example ("rank_increasing" or "rank_decrasing"), or from the median of the rank of these
+    values ("rank-median_increasing" or "rank-median_decreasing"). The rank can also be "random".
 
     Parameters:
         attr  --  Array of size (n_sample, n_feat).
-        _type  --  Str, "random", "increasing", "decreasing", "rank_increasing", "rank_decreasing".
+        _type  --  Str, "random", "sum_increasing", "sum_decreasing", "rank_increasing", "rank_decreasing", "rank-median_increasing", "rank-median_decreasing".
     """
+    assert _type in ["random", "sum_increasing", "sum_decreasing", "rank_increasing", "rank_decreasing", "rank-median_increasing", "rank-median_decreasing"], '_type should be in ["random", "sum_increasing", "sum_decreasing", "rank_increasing", "rank_decreasing", "rank-median_increasing", "rank-median_decreasing"]' 
     if _type == "random":
         order = np.arange(0, attr.shape[1])
         np.random.shuffle(order)
     else:
         if _type.split('_')[0] == "rank":
             ranks = np.argsort(attr, axis=1)
-            _sum = np.sum(ranks, axis=0)
-            _type = _type.split('_')[1]
-        else:
-            _sum = np.sum(attr, axis=0)
-        if _type == "increasing":
-            order = np.argsort(_sum)
-        elif _type == 'decreasing':
-            order = np.argsort(-_sum)
+            values = np.sum(ranks, axis=0)
+        elif _type.split('_')[0] == "rank-median":
+            ranks = np.argsort(attr, axis=1)
+            values = np.median(ranks, axis=0)
+        elif _type.split('_')[0] == "sum":
+            values = np.sum(attr, axis=0)
+        if _type.split('_')[1] == "increasing":
+            order = np.argsort(values)
+        elif _type.split('_')[1] == 'decreasing':
+            order = np.argsort(-values)
     return order.reshape(1, -1)
+
+
+def from_classes_to_subclasses(data_path, name, set_name, n_subclass, labels, studied_class, other_class):
+    """
+    Convert all class labels appearing in labels, studied_class, other_class to subclass labels. 
+    """
+    # Mapping used for 'SimuB', 'SimuC' and syn_g_...
+    assert name in ['SimuB', 'SimuC'] or name[:5] == 'syn_g', "Warning! Adapt the function `from_classes_to_subclasses` to your new dataset."
+    mapping = {
+        0: list(np.arange(n_subclass - 1)),
+        1: [n_subclass - 1]}
+    
+    # Map studied_class
+    new_studied_class = []
+    for c in studied_class:
+        new_studied_class += mapping[c]
+    
+    # Map other_class
+    new_other_class = {}
+    for c in other_class.keys():
+        for new_c in mapping[c]:
+            new_other_class[new_c] = []
+            for o_c in other_class[c]:
+                new_other_class[new_c] += mapping[o_c]
+                
+    # Map the labels of the examples
+    ## Load all examples in the same order to replace the labels
+    train_loader, test_loader, _, _, _, _, _, _ = load_dataloader(data_path, name, 'cpu', regroup=False)
+    dataloader = train_loader if set_name=='train' else test_loader
+    new_labels = []
+    torch.manual_seed(1)
+    for _, target in dataloader:
+        target = target[torch.isin(target, torch.tensor(new_studied_class))]  # Attributions are only computed for examples whose class belongs to `studied_class`.
+        size = target.shape[0]
+        if size != 0:
+            new_labels += list(target.cpu().detach().numpy())
+    new_labels = np.array(new_labels)
+    
+    ## Assert that the order of the examples is correct.
+    for i, c in enumerate(labels):
+        assert new_labels[i] in mapping[c]
+    
+    return new_labels, new_studied_class, new_other_class
+
+
+def get_informative_variables(studied_class, other_class, useful_group, useful_variable):
+    """
+    Return a list of variables enabling to identify each class listed in studied_class from the classes listed in other_classes.
+    
+    Parameters:
+        studied_class  --  list of integers representing classes
+        other_class  --  dict, associate each class (keys, e.g. 0) with a list of integers (values, e.g. [1, 2])
+        useful_group  --  dict, associate each class (keys, e.g. "C0") with over-expressed groups (values)
+        useful_variable  --  dict, associate groups (keys) with expressed variables (values)
+    """
+    counts = {}
+    variables = {}
+    for c in studied_class:
+        variables["C"+str(c)] = []
+        counts[c] = 0
+        for P in useful_group["C"+str(c)]:
+            for g in useful_variable[P]:
+                if g not in variables["C"+str(c)]:
+                    variables["C"+str(c)].append(g)
+                    counts[c] += 1
+        for other_c in other_class[c]:
+            for P in useful_group["C"+str(other_c)]:
+                for g in useful_variable[P]:
+                    if g not in variables["C"+str(c)]:
+                        variables["C"+str(c)].append(g)
+                        counts[c] += 1
+    return counts, variables
+

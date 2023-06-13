@@ -6,6 +6,7 @@ def set_path():
 
 # Sets of variables
 import os
+import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import MultiStepLR
@@ -15,31 +16,7 @@ def get_hyperparameters(name, model_name):
     n_layer = None
     n_hidden_feat = None
     if model_name == "MLP":
-        if name == "KIRC":
-            n_layer = 1
-            n_hidden_feat = 20
-        elif name == "BRCA":
-            n_layer = 1
-            n_hidden_feat = 40
-        elif name == "s2":
-            n_layer = 1
-            n_hidden_feat = 20
-        elif name == "s1":
-            n_layer = 1
-            n_hidden_feat = 20
-        elif name == "s3":
-            n_layer = 1
-            n_hidden_feat = 10
-        elif name == "s4":
-            n_layer = 1
-            n_hidden_feat = 10
-        elif name == "s5":
-            n_layer = 1
-            n_hidden_feat = 10
-        elif name in ["pancan", "SIMU1", "SIMU2"]:
-            n_layer = 1
-            n_hidden_feat = 20
-        elif name.split("_")[0] == "syn":
+        if name in ["pancan", "KIRC", "BRCA", "SIMU1", "SIMU2", "SimuA", "SimuB", "SimuC"]:
             n_layer = 1
             n_hidden_feat = 20
     elif model_name == "DiffuseMLP":
@@ -82,16 +59,60 @@ def get_data_path(name):
     return data_path
 
 
-def get_setting(name):
+def get_TCGA_setting(name):
     assert name in ["pancan", "BRCA", "KIRC"], "Name should be pancan, BRCA or KIRC"
     if name == "pancan":
         database = "pancan"
         label_name = "type"
-        log = True
-        _sum = False
     elif name in ["BRCA", "KIRC"]:
         database = "gdc"
         label_name = "sample_type.samples"
-        log = True
-        _sum = True
-    return database, label_name, log, _sum
+    return database, label_name
+    
+
+def get_data_normalization_parameters(name):
+    # Default
+    use_mean = True
+    use_std = True
+    log2 = False
+    reverse_log2 = False
+    divide_by_sum = False
+    factor = None
+    
+    if name == 'pancan':
+        log2 = True
+    elif name in ['BRCA', 'KIRC']:
+        log2 = True
+        reverse_log2 = True
+        divide_by_sum = True
+        factor = 10**6
+        use_std = False
+    return use_mean, use_std, log2, reverse_log2, divide_by_sum, factor
+
+
+def get_split_dataset_setting(name):
+    test_size = 0.4
+    random_state = 43
+    return test_size, random_state
+
+
+def get_loader_setting(name):
+    batch_size = 32
+    return batch_size
+
+
+def get_XAI_hyperparameters(name, n_class):
+    """
+    Return `base_class` and `studied_class`, two hyperparameters required by the XAI method called Integrated Gradients (IG).
+    `base_class` is either a number between 0 and n_class - 1 or None. If it is a number, the baseline used by IG is the
+    average of the training examples of the `base_class` class. Otherwise, the baseline used is the null tensor.
+    studied_class is a list of numbers between 0 and n_class - 1. It contains the classes of the examples for which the
+    IG scores will be computed.    
+    """
+    if name in ['BRCA', 'KIRC', 'SimuA', 'SimuB', 'SimuC']:
+        base_class = 1
+        studied_class = [0,]
+    else:
+        base_class = None
+        studied_class = list(np.arange(n_class))
+    return base_class, studied_class

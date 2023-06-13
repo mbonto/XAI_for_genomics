@@ -20,6 +20,7 @@ def get_a_graph(X, method='cosine_similarity'):
         A = get_rank_correlation(X)
     elif method == 'euclidean_distance':
         A = get_euclidean_distance(X)
+    remove_diag(A)
     return A
 
 
@@ -116,6 +117,13 @@ def smoothness(G, signal):
 
 def get_degree_matrix(A):
     if issparse(A):
+        return eye(A.shape[0], A.shape[1]).multiply(np.sum(A, axis=1))
+    else:
+        return np.diag(np.sum(A, axis=1))
+    
+    
+def get_inverse_square_root_degree_matrix(A):
+    if issparse(A):
         return eye(A.shape[0], A.shape[1]).multiply((1/np.sqrt(np.sum(A, axis=1))))
     else:
         return np.diag(1/np.sqrt(np.sum(A, axis=1)))
@@ -126,6 +134,6 @@ def get_normalized_adjaceny_matrix(A):
         A = A + eye(A.shape[0], A.shape[1])
     else:
         A = A + np.eye(A.shape[0])
-    D = get_degree_matrix(A)
+    D = get_inverse_square_root_degree_matrix(A)
     A = D.dot(A).dot(D)
     return A

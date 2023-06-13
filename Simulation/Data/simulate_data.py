@@ -71,24 +71,9 @@ def return_parameters(name):
     elif name in ['SimuC',]:
         n_class = 6
         n_gene = 50000
-    elif name.split("_")[0] == "syn":
-        n_gene = 2000
-        if name.split("_")[1] == "g":
-            n_class = int(name.split("_")[2]) + 1
-        else:
-            n_class = 2
-    elif name == "demo":
-        n_class = 2
-        n_gene = 12
     
     # Distribution of the examples among the classes
-    if name.split("_")[0] == "syn" and name.split("_")[1] == "g" and name.split("_")[2] in ["5", "10"]:
-        if name.split("_")[2] == "5":
-            proportion = [1/10, 1/10, 1/10, 1/10, 1/10, 1/2]
-        elif name.split("_")[2] == "10":
-            proportion = [1/20, 1/20, 1/20, 1/20, 1/20, 1/20, 1/20, 1/20, 1/20, 1/20, 1/2]
-    else:
-        proportion = None  # if None, generate a balanced number of samples per class
+    proportion = None  # if None, generate a balanced number of samples per class
     
     alpha = {}
     
@@ -99,13 +84,6 @@ def return_parameters(name):
         n_pathway = 3000
     elif name in ['SimuA', 'SimuB', 'SimuC']:
         n_pathway = 5000
-    elif name.split("_")[0] == "syn":
-        if name.split("_")[1] in ["g", "p"]:
-            n_pathway = 200
-        elif name.split("_")[1] == "t":
-            n_pathway = int(2000 / int(name.split("_")[2]))
-    elif name == "demo":
-        n_pathway = 3
     for c in range(n_class):
         alpha['C' + str(c)] = np.array([1.] * n_pathway)  # each pathway has a priori the same importance
 
@@ -116,15 +94,6 @@ def return_parameters(name):
         P = 37
     elif name in ['SimuA', 'SimuB', 'SimuC']:
         P = 500
-    elif name.split("_")[0] == "syn":
-        if name.split("_")[1] == "g":
-            P = 10
-        elif name.split("_")[1] == "t":
-            P = 1
-        elif name.split("_")[1] == "p":
-            P = int(name.split("_")[2])
-    elif name == "demo":
-        P = 1
             
     useful_paths = {}
     for c in range(n_class):
@@ -144,16 +113,6 @@ def return_parameters(name):
     elif name in ['SIMU2', ]:
         case = 0
         sparsity = 1 / n_gene * 10
-    elif name.split("_")[0] == "syn":
-        if name.split("_")[1] == "t":
-            case = int(name.split("_")[2])
-        else:
-            case = 10
-        sparsity = None
-    elif name == "demo":
-        case = 4
-        sparsity = None
-    
 
     # Drawn gene distribution per pathway
     eta, beta = generate_eta_beta(n_pathway, sparsity, n_gene, case=case)

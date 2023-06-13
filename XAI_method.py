@@ -50,6 +50,10 @@ def compute_attributes_from_a_dataloader(model, dataloader, transform, device, s
         target = target.to(device)
         
         if method == "Integrated_Gradients":
+            # For each input, the sum of the attributions should be equal to model(input) - model(baseline).
+            # If n_step is too small, this statement might not be true due to approximation errors.
+            # Here, we accept any absolute difference lower than 1 (considering that the highest possible probability is 100).
+            # If the gap is bigger, the attributions are computed by an increased number of steps.
             valid = False
             add = 0
             while not valid:
@@ -169,10 +173,10 @@ def get_baseline(train_loader, device, n_feat, transform, base_class=None):
 
 def load_attributions(XAI_method, save_path, set_name):
     checkpoint = torch.load(os.path.join(save_path, '{}_{}.pt'.format(XAI_method, set_name)))
-    return checkpoint['features_score'], checkpoint['predictions'], checkpoint['true_labels'], checkpoint['labels_name'], checkpoint['features_name']
+    return checkpoint['features_score'], checkpoint['predictions'], checkpoint['true_labels'], checkpoint['labels_name'], checkpoint['features_name'], checkpoint['baseline'], checkpoint['baseline_pred']
 
 
-def save_attributions(features_score, features_name, model, XAI_method, predictions, true_labels, labels_name, save_path, set_name):
+def save_attributions(features_score, features_name, model, XAI_method, predictions, true_labels, baseline, baseline_pred, labels_name, save_path, set_name):
     torch.save({'features_score': features_score,
             'predictions': predictions,
             'true_labels': true_labels,
@@ -180,4 +184,6 @@ def save_attributions(features_score, features_name, model, XAI_method, predicti
             'features_name': features_name,
             'variables': model.variables,
             'name': model.name,
+            'baseline': baseline,
+            'baseline_pred': baseline_pred
             }, os.path.join(save_path, "{}_{}.pt".format(XAI_method, set_name)))

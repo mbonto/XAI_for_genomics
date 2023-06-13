@@ -4,10 +4,10 @@ import torch.nn as nn
 from torch.utils.data.sampler import SubsetRandomSampler
 import os
 from dataset import *
-from setting import get_setting
+from setting import *
 
 
-### Useful functions
+### Functions for TCGA data
 def get_number_features(data):
     for X, y in data:
         n_feat = X.shape[0]
@@ -19,6 +19,174 @@ def get_number_classes(data):
     return len(data.label_key)
 
 
+
+### Normalisation   
+def transform_data(X, transform='divide_by_sum', factor=1):
+    """Return a numpy array or a torch tensor of shape [n, p].
+    
+    Parameters:
+        X  --  Numpy array or torch tensor of shape [n, p] containing n vectors.
+        transform  --  Str, name of a transformation in ['log2', 'reverse_log2', 'sqrt', 'reduce_center', 'pearson_regularization', 'divide_by_sum', 'divide_by_norm'].
+                       'log2'  --  log2(X + 1)
+                       'reverse_log2'  --  2**X - 1
+                       'sqrt'  --  sqrt(X)
+                       'reduce_center'  --  standardization of each variable i.  (X[:, i] - mean(X[:, i])) / standard deviation(X[:, i]).
+                       'pearson_regularization'  --  divide all values of a variable i by the square root of its mean. X[:, i] / sqrt(mean(X[:, i])).
+                       'divide_by_sum'  -- each X[k, :] is multiplied by `factor` / sum(X[k, :]). Thus, the sum of the coefficients of X[k, :] is 'factor'.
+                       'divide_by_norm'  --  the Euclidean norm of each X[k, :] is set to 1.
+        factor  --  Float. Only used when transform in ['divide_by_sum', 'divide_by_norm'].
+    """
+    assert transform in ['log2', 'reverse_log2', 'sqrt', 'reduce_center', 'pearson_regularization', 'divide_by_sum', 'divide_by_norm'], "transform should be 'log2', 'reverse_log2', 'sqrt', 'reduce_center', 'pearson_regularization', 'divide_by_sum', 'divide_by_norm'"
+    # With torch
+    if str(X.dtype).split('.')[0] == 'torch':
+        if transform == 'log2':
+            return torch.log2(X + 1)
+        elif transform == 'reverse_log2':
+            return 2**X - 1
+        elif transform == 'sqrt':
+            return torch.sqrt(X)
+        elif transform == 'reduce_center':
+            mean, std = torch.mean(X, dim=0), torch.std(X, dim=0)
+            return (X - mean) / std
+        elif transform == 'pearson_regularization':
+            mean = torch.mean(X, dim=0)
+            return X / torch.sqrt(mean)
+        elif transform == 'divide_by_sum':
+            return X / torch.sum(X, dim=1).reshape((-1, 1)) * factor 
+        elif transform == 'divide_by_norm':
+            return X / torch.linalg.norm(X, dim=1).reshape((-1, 1)) * factor
+    # With numpy
+    else:
+        if transform == 'log2':
+            return np.log2(X + 1)
+        elif transform == 'reverse_log2':
+            return 2**X - 1
+        elif transform == 'sqrt':
+            return np.sqrt(X)
+        elif transform == 'reduce_center':
+            mean, std = np.mean(X, axis=0), np.std(X, axis=0)
+            return (X - mean) / std
+        elif transform == 'pearson_regularization':
+            mean = np.mean(X, axis=0)
+            return X / np.sqrt(mean)
+        elif transform == 'divide_by_sum':
+            return X / np.sum(X, axis=1).reshape((-1, 1)) * factor
+        elif transform == 'divide_by_norm':
+            return X / np.linalg.norm(X, axis=1).reshape((-1, 1)) * factor
+            
+ 
+ 
+### Normalisation for datasets
+def normalize_train_test_sets(X_train, X_test, mean=True, std=True, log2=False, reverse_log2=False, divide_by_sum=False, factor=10**6):
+    """Return numpy arrays or a torch tensors X_train, X_test whose values are normalized according to specific transformations.
+    
+    Parameters:
+        X_train  --  Numpy array or torch tensor of shape [n1, p] containing n1 examples.
+        X_test  --  Numpy array or torch tensor of shape [n2, p] containing n2 examples.
+        mean  --  Remove to each variable p its mean over all training examples.
+        std  --  Divide each variable p with each standard deviation computed over all training examples.
+        log2  --  log2(X + 1)
+        reverse_log2  --  2**X - 1
+        divide_by_sum  -- each example X[k, :] is multiplied by `factor` / sum(X[k, :]). Thus, the sum of the coefficients of X[k, :] is 'factor'.
+        factor  --  Float. Only used if divide_by_sum is True.
+    """
+    if reverse_log2:
+        X_train = transform_data(X_train, transform='reverse_log2')
+        X_test = transform_data(X_test, transform='reverse_log2')
+    if divide_by_sum:
+        X_train = transform_data(X_train, transform='divide_by_sum', factor=factor)  
+        X_test = transform_data(X_test, transform='divide_by_sum', factor=factor)
+    if log2:
+        X_train = transform_data(X_train, transform='log2')
+        X_test = transform_data(X_test, transform='log2')
+    if mean:
+        mean = X_train.mean(dim=0) if str(X_train.dtype).split('.')[0] == 'torch' else np.mean(X_train, axis=0)
+        X_train = X_train - mean
+        X_test = X_test - mean
+    if std:
+        std = X_train.std(dim=0) if str(X_train.dtype).split('.')[0] == 'torch' else np.std(X_train, axis=0)
+        X_train = X_train / std
+        X_test = X_test / std
+    return X_train, X_test
+
+
+
+### Normalisation for dataloaders
+def find_mean_std(data, train_sampler, device, log2, reverse_log2, divide_by_sum, factor):
+    loader = torch.utils.data.DataLoader(data, batch_size=len(train_sampler), sampler=train_sampler)
+    X, y = next(iter(loader))
+    if reverse_log2:
+        X = transform_data(X, transform='reverse_log2')
+    if divide_by_sum:
+        X = transform_data(X, transform='divide_by_sum', factor=factor)
+    if log2:
+        X = transform_data(X, transform='log2')
+    return X.mean(dim=0).to(device), X.std(dim=0).to(device)
+
+
+class normalize(nn.Module):
+    """Class enabling to normalize the values of the examples.
+    """
+    def __init__(self, mean, std, log2, reverse_log2, divide_by_sum, factor):
+        """
+        Parameters:
+            mean  --  Torch tensor of shape (1, p). Mean is subtracted to X.
+            std  --  Torch tensor of shape (1, p). X is divided by std.
+            log2  --  True or False, transform X into log2(X + 1)
+            reverse_log2  --  True or False, transform X into 2**X - 1
+            divide_by_sum  -- True or False, multiply each example X[k, :] by `factor` / sum(X[k, :]). Thus, the sum of the coefficients of X[k, :] is 'factor'.
+            factor  --  Float. Only used if divide_by_sum is True.
+        """
+        super().__init__()
+        self.mean = mean
+        self.std = std
+        self.log2 = log2
+        self.reverse_log2 = reverse_log2
+        self.divide_by_sum = divide_by_sum
+        self.factor = factor
+        
+    def forward(self, X):
+        """
+        Parameters:
+            X  --  Torch tensor of shape (n, p) containing n examples.
+        """
+        if self.reverse_log2:
+            X = transform_data(X, transform='reverse_log2')
+        if self.divide_by_sum:
+            X = transform_data(X, transform='divide_by_sum', factor=self.factor)
+        if self.log2:
+            X = transform_data(X, transform='log2')
+        return (X - self.mean) / self.std
+
+
+
+### Datasets
+def load_data(data_path, name):
+    """
+    Load all examples of the dataset called `name` stored in `data_path` in a data matrix `X` and a label matrix `y`.
+    Labels are numbers between 0 and the number of classes. The name of the classes are returned in the `class_name` list.
+    The names of the features are returned in the `feat_name` list.
+    """
+    assert name in ["pancan", "BRCA", "KIRC", 'SIMU1', 'SIMU2', 'SimuA', 'SimuB', 'SimuC'] or name[:3] == "syn", "Modify the function load_data to load your own dataset."
+    if name in ["pancan", "BRCA", "KIRC"]:
+        database, label_name = get_TCGA_setting(name)
+        data = TCGA_dataset(data_path, database, name, label_name)
+        X = np.zeros((len(data), get_number_features(data)))
+        y = np.zeros((len(data))).astype('int64')
+        for i, (sample, label) in enumerate(data):
+            X[i] += sample.numpy()
+            y[i] += label.numpy()
+        class_name = list(data.label_map.keys())
+        feat_name = data.genes_IDs
+    elif name in ['SIMU1', 'SIMU2', 'SimuA', 'SimuB', 'SimuC'] or name[:3] == "syn":
+        data = np.load(os.path.join(data_path, f'{name}.npy'), allow_pickle=True).item()
+        X = data['X']
+        y = data['y']
+        class_name = np.arange(len(np.unique(y)))
+        feat_name = np.arange(X.shape[1])
+    return X, np.ravel(y), class_name, feat_name
+    
+    
 def split_indices(data_size, test_size, random_state):
     # Shuffle the indices
     indices = list(range(data_size))
@@ -32,6 +200,127 @@ def split_indices(data_size, test_size, random_state):
     return train_indices, test_indices
 
 
+def split_data_from_indices(X, y, train_indices, test_indices):
+    return X[train_indices], X[test_indices], y[train_indices], y[test_indices]
+
+
+def load_dataset(data_path, name, normalize, regroup=True, classes=None):
+    """
+    Load data and split them into a training set and a test set.
+    
+    Parameters:
+        normalize  --  True or False, state whether the data are normalized (each variable is centered and reduced on the training set).
+        regroup  --  True or False, used only if the dataset contains subclasses (e.g. 'SimuB', 'SimuC'). If True, subclasses are regrouped into one class. 
+                     Otherwise, they appear as different classes.
+        classes  --  None or list of integers. If None, all classes are considered. Otherwise, only the elements belonging to the listed classes are kept.
+    """  
+    # Load data
+    X, y, class_name, feat_name = load_data(data_path, name)
+
+    # Create train/test sets
+    test_size, random_state = get_split_dataset_setting(name)
+    train_indices, test_indices = split_indices(len(X), test_size, random_state)
+    X_train, X_test, y_train, y_test = split_data_from_indices(X, y, train_indices, test_indices)
+
+    # Special case: relabel the classes to create an heterogeneous class
+    if regroup:
+        if name in ['SimuB', 'SimuC'] or name[:5] == "syn_g":
+            for c in range(1, len(np.unique(y)) - 1):
+                y_train[np.argwhere(y_train == c)] = np.zeros(np.argwhere(y_train == c).shape)
+                y_test[np.argwhere(y_test == c)] = np.zeros(np.argwhere(y_test == c).shape)
+            y_train[np.argwhere(y_train == len(np.unique(y)) - 1)] = np.ones(np.argwhere(y_train == len(np.unique(y)) - 1).shape)
+            y_test[np.argwhere(y_test == len(np.unique(y)) - 1)] = np.ones(np.argwhere(y_test == len(np.unique(y)) - 1).shape)
+            class_name = np.arange(len(np.unique(y_train)))
+    
+    # Special case: select a subset of classes
+    if classes is not None:
+        train_indices = [item for _class in classes for item in torch.argwhere(y_train.reshape(-1) == _class)[:, 0].cpu().numpy()]
+        X_train = X_train[train_indices]
+        y_train = y_train[train_indices]
+        test_indices = [item for _class in classes for item in torch.argwhere(y_test.reshape(-1) == _class)[:, 0].cpu().numpy()]
+        X_test = X_test[test_indices]
+        y_test = y_test[test_indices]
+        
+    # Normalize the data        
+    if normalize:
+        mean, std, log2, reverse_log2, divide_by_sum, factor = get_data_normalization_parameters(name)
+        X_train, X_test = normalize_train_test_sets(X_train, X_test, mean, std, log2, reverse_log2, divide_by_sum, factor)
+            
+    # Information
+    n_class = len(np.unique(y_train))
+    n_feat = X_train.shape[1]
+        
+    return X_train, X_test, y_train, y_test, n_class, n_feat, class_name, feat_name   
+        
+
+### Loaders
+def load_dataloader(data_path, name, device, regroup=True):
+    """
+    Function returning torch dataloaders from a dataset called `name`. 
+    `regroup` is only used for the simulated datasets containing subclasses (e.g. 'SimuA', 'SimuB', 'SimuC'). 
+    If regroup, the subclasses are regrouped into one class. Otherwise, they appear as different classes. 
+    """
+    # Setting
+    test_size, random_state = get_split_dataset_setting(name)
+    use_mean, use_std, log2, reverse_log2, divide_by_sum, factor = get_data_normalization_parameters(name)
+    batch_size = get_loader_setting(name)
+    
+    if name in ["pancan", "BRCA", "KIRC"]:
+        # Load data
+        database, label_name = get_TCGA_setting(name)
+        data = TCGA_dataset(data_path, database, name, label_name)
+
+        # Information
+        n_class = get_number_classes(data)
+        n_feat = get_number_features(data)
+        class_name = data.label_key
+        feat_name = data.genes_IDs
+        n_sample = len(data)
+        
+        # Create train/test loaders
+        train_indices, test_indices = split_indices(n_sample, test_size, random_state)
+        train_sampler = SubsetRandomSampler(train_indices)
+        train_loader = torch.utils.data.DataLoader(data, batch_size=batch_size, sampler=train_sampler)
+        test_sampler = SubsetRandomSampler(test_indices)
+        test_loader = torch.utils.data.DataLoader(data, batch_size=batch_size, sampler=test_sampler)
+        
+        # Mean / Std
+        mean, std = find_mean_std(data, train_sampler, device, log2, reverse_log2, divide_by_sum, factor)
+        
+    else:
+        # Load data
+        X_train, X_test, y_train, y_test, n_class, n_feat, class_name, feat_name = load_dataset(data_path, name, normalize=False, regroup=regroup)
+        
+        # Information
+        n_sample = len(X_train) + len(X_test)
+
+        # Create train/test sets
+        X_train = torch.from_numpy(X_train).type(torch.float)
+        X_test = torch.from_numpy(X_test).type(torch.float)
+        y_train = torch.tensor(y_train)
+        y_test = torch.tensor(y_test)
+        train_set = custom_dataset(X_train, y_train)
+        test_set = custom_dataset(X_test, y_test)
+        
+        # Create train/test loaders
+        train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size)
+        test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size)
+        
+        # Mean / Std
+        mean, std = find_mean_std(train_set, np.arange(len(train_set)), device, log2, reverse_log2, divide_by_sum, factor)
+        
+    # Normalization
+    if not use_mean:
+        mean = torch.zeros(mean.shape).to(device)
+    if not use_std:
+        std = torch.ones(std.shape).to(device)
+    transform = normalize(mean, std, log2, reverse_log2, divide_by_sum, factor)
+        
+    return train_loader, test_loader, n_class, n_feat, class_name, feat_name, transform, n_sample
+
+
+
+### Useful functions    
 def create_balanced_subset_from_data(data, indices, n):
     """
     Return a subset of the list 'indices' containing 'n' examples for each class. 
@@ -50,266 +339,3 @@ def create_balanced_subset_from_data(data, indices, n):
         if classes[y] <= n:
             subset_indices.append(i)
     return subset_indices
-
-
-### Torch loaders
-def find_mean_std(data, train_sampler, device, log=True, _sum=False, norm=False):
-    loader = torch.utils.data.DataLoader(data, batch_size=len(train_sampler), sampler=train_sampler)
-    x, y = next(iter(loader))
-    if norm:
-        x = x / torch.linalg.norm(x, axis=1).reshape(-1, 1) * 10**5
-    if _sum:
-        x = 2**x - 1
-        x = x / torch.sum(x, dim=1).reshape(-1, 1) * 10**6 
-    if log:
-        mean, std = torch.log2(x+1).mean(dim=0), torch.log2(x+1).std(dim=0)
-    else:
-        mean, std = x.mean(dim=0), x.std(dim=0)
-    return mean.to(device), std.to(device)
-
-
-class normalize(nn.Module):
-    """Class enabling to 1- Scale the examples. 2 - Center/Reduce the features.
-    
-    Scaling parameters:
-        log  --  all values are log2 transformed
-        norm  --  the norm of each sample will be equal to 10**5
-        _sum  -- all values are transformed with 2**value - 1. Then, the sum of each sample becomes equal to 10**6.
-    """
-    def __init__(self, mean, std, log=True, _sum=False, norm=False):
-        super().__init__()
-        self.mean = mean
-        self.std = std
-        self.log = log
-        self.norm = norm
-        self._sum = _sum
-        
-    def forward(self, x):
-        if self.norm:
-            x = x / torch.linalg.norm(x, axis=1).reshape(-1, 1) * 10**5
-        if self._sum:
-            x = 2**x - 1
-            x = x / torch.sum(x, dim=1).reshape(-1, 1) * 10**6
-        if self.log:
-            return (torch.log2(x+1) - self.mean) / self.std
-        else:
-            return (x - self.mean) / self.std
-
-
-def load_dataloader(data_path, name, device, batch_size):
-    if name in ["pancan", "BRCA", "KIRC", "COAD", "LUAD"]:
-        # Load data
-        database, label_name, log, _sum = get_setting(name)
-        data = TCGA_dataset(data_path, database, name, label_name)
-
-        # Information
-        n_class = get_number_classes(data)
-        n_feat = get_number_features(data)
-        class_name = data.label_key
-        feat_name = data.genes_IDs
-        n_sample = len(data)
-        
-        # Create train/test loaders
-        random_state = 43
-        test_size = 0.4
-        train_indices, test_indices = split_indices(n_sample, test_size, random_state)
-        train_sampler = SubsetRandomSampler(train_indices)
-        train_loader = torch.utils.data.DataLoader(data, batch_size=batch_size, sampler=train_sampler)
-        test_sampler = SubsetRandomSampler(test_indices)
-        test_loader = torch.utils.data.DataLoader(data, batch_size=batch_size, sampler=test_sampler)
-
-        # Normalization
-        mean, std = find_mean_std(data, train_sampler, device, log, _sum)
-        if name != 'pancan':
-            std = torch.ones(std.shape).to(device)
-        transform = normalize(mean, std, log, _sum)
-        
-    else:
-        # Load data
-        data = np.load(os.path.join(data_path, f'{name}.npy'), allow_pickle=True).item()
-        X = data['X']
-        y = data['y']
-        
-        # Information
-        n_class = data['n_class']
-        if name in ['SimuA', 'SimuB', 'SimuC'] or name[:3] == "syn":
-            n_class = 2
-        n_feat = data['n_gene']
-        class_name = np.arange(n_class)
-        feat_name = None
-        n_sample = len(X)
-        
-        # Create train/test sets
-        random_state = 43
-        test_size = 0.4
-        train_indices, test_indices = split_indices(n_sample, test_size, random_state)
-        X_train, X_test, y_train, y_test = split_data_from_indices(X, y, train_indices, test_indices)
-        X_train = torch.from_numpy(X_train).type(torch.float)
-        X_test = torch.from_numpy(X_test).type(torch.float)
-        
-        # Relabel the classes to create an heterogeneous class
-        if name in ['SimuB', 'SimuC'] or name[:5] == "syn_g":
-            for c in range(1, data['n_class']-1):
-                y_train[np.argwhere(y_train == c)] = np.zeros(np.argwhere(y_train == c).shape)
-                y_test[np.argwhere(y_test == c)] = np.zeros(np.argwhere(y_test == c).shape)
-            y_train[np.argwhere(y_train == data['n_class']-1)] = np.ones(np.argwhere(y_train == data['n_class']-1).shape)
-            y_test[np.argwhere(y_test == data['n_class']-1)] = np.ones(np.argwhere(y_test == data['n_class']-1).shape)
-
-        # Create train/test datasets
-        y_train = torch.tensor(y_train)
-        y_test = torch.tensor(y_test)
-        for _class in range(n_class):
-            assert torch.sum(y_train==_class) >= 10
-        train_set = custom_dataset(X_train, y_train)
-        test_set = custom_dataset(X_test, y_test)
-        
-        # Create train/test loaders
-        train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size)
-        test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size)
-        
-        # Normalization
-        mean, std = find_mean_std(train_set, np.arange(len(train_set)), device, log=False, _sum=False)
-        transform = normalize(mean, std, log=False, _sum=False)
-        
-    return train_loader, test_loader, n_class, n_feat, class_name, feat_name, transform, n_sample
-
-
-
-### Datasets
-def load_dataset(data_path, name, normalize=False):
-    if name in ["pancan", "BRCA", "KIRC", "COAD", "LUAD"]:
-        # Load data
-        database, label_name, log, _sum = get_setting(name)
-        data = TCGA_dataset(data_path, database, name, label_name)
-        if name != "pancan":
-            std = False
-        else:
-            std = True
-        # Create train/test sets
-        X_train, X_test, y_train, y_test = create_train_test(data, test_size=0.4, random_state=43, normalize=normalize, log=log, _sum=_sum, std=std)
-        X_train = X_train.numpy()
-        X_test = X_test.numpy()
-        y_train = np.ravel(y_train.numpy())
-        y_test = np.ravel(y_test.numpy())
-        # Information
-        n_class = get_number_classes(data)
-        n_feat = get_number_features(data)
-        class_name = list(data.label_map.keys())
-
-        # Information
-        n_class = get_number_classes(data)
-        n_feat = get_number_features(data)
-        class_name = list(data.label_map.keys())
-    elif name in ['SIMU1', 'SIMU2', 'SimuA', 'SimuB', 'SimuC'] or name[:3] == "syn":
-        # Load data
-        data = np.load(os.path.join(data_path, f'{name}.npy'), allow_pickle=True).item()
-        X = data['X']
-        y = data['y']
-        # Create train/test sets
-        train_indices, test_indices = split_indices(len(X), test_size=0.4, random_state=43)
-        X_train, X_test, y_train, y_test = split_data_from_indices(X, y, train_indices, test_indices)
-        if normalize:
-            X_train, X_test = normalize_train_test(X_train, X_test, log=False, _sum=False, std=True) 
-        # Information
-        n_class = data['n_class']
-        n_feat = data['n_gene']
-        print(f"In our dataset, we have {n_class} classes. Each example contains {n_feat} features.")
-        class_name = np.arange(n_class)
-    return X_train, X_test, y_train, y_test, n_class, n_feat, class_name
-
-
-def create_train_test(data, test_size, random_state, normalize=True, classes=None, log=True, _sum=False, std=True):
-    # Get training and test set
-    X, y = get_X_y(data)
-    train_indices, test_indices = split_indices(len(data), test_size, random_state)
-    X_train, X_test, y_train, y_test = split_data_from_indices(X, y, train_indices, test_indices)
-    # Select a subset of classes
-    if classes is not None:
-        train_indices = [item for _class in classes for item in torch.argwhere(y_train.reshape(-1) == _class)[:, 0].cpu().numpy()]
-        X_train = X_train[train_indices]
-        y_train = y_train[train_indices]
-        test_indices = [item for _class in classes for item in torch.argwhere(y_test.reshape(-1) == _class)[:, 0].cpu().numpy()]
-        X_test = X_test[test_indices]
-        y_test = y_test[test_indices]
-    # Normalize them
-    if normalize:
-        X_train, X_test = normalize_train_test(X_train, X_test, log, _sum, std)
-    return X_train, X_test, y_train, y_test
-
-
-def get_X_y(data):
-    """Load the entire dataset into two tensors."""
-    data_size = len(data)
-    n_feat = get_number_features(data)
-
-    X = torch.zeros((data_size, n_feat))
-    y = torch.zeros((data_size, 1))
-    for i, (sample, label) in enumerate(data):
-        X[i] += sample
-        y[i] += label
-
-    return X, y
-
-
-def split_data_from_indices(X, y, train_indices, test_indices):
-    return X[train_indices], X[test_indices], y[train_indices], y[test_indices]
-
-
-def normalize_train_test(X_train, X_test, log=True, _sum=False, std=True):
-    if str(X_train.dtype).split('.')[0] == 'torch':
-        if _sum:
-            X_train = 2**X_train - 1
-            X_train = X_train / torch.sum(X_train, dim=1).reshape(-1, 1) * 10**6
-            X_test = 2**X_test - 1
-            X_test = X_test / torch.sum(X_test, dim=1).reshape(-1, 1) * 10**6 
-        if log:
-            X_train = torch.log2(X_train+1)
-            X_test = torch.log2(X_test+1)
-        mean = X_train.mean(dim=0)
-        if std:
-            std = X_train.std(dim=0)
-    else:
-        if _sum:
-            X_train = 2**X_train - 1
-            X_train = X_train / np.sum(X_train, axis=1).reshape(-1, 1) * 10**6
-            X_test = 2**X_test - 1
-            X_test = X_test / np.sum(X_test, axis=1).reshape(-1, 1) * 10**6 
-        if log:
-            X_train = np.log2(X_train+1)
-            X_test = np.log2(X_test+1)
-        mean = np.mean(X_train, axis=0)
-        if std:
-            std = np.std(X_train, axis=0)
-    if std is not False:
-        X_train = (X_train - mean) / std
-        X_test = (X_test - mean) / std
-    else:
-        X_train = (X_train - mean)
-        X_test = (X_test - mean)
-    return X_train, X_test
-
-
-def scale_data(X, _type='sum', factor=10**6):
-    """X is a matrix of shape [n, p] containing n vectors. 
-    Return a matrix of shape [n, p].
-    If _type='sum', the sum of X[k, :] is 'factor'.
-    If _type='norm', the Euclidean norm of X[k, :] is set to 1.
-    """
-    if _type == 'sum':
-        return X / np.reshape(np.sum(X, axis=1), (-1, 1)) * factor
-    elif _type == 'norm':
-        return X / np.reshape(np.linalg.norm(X, axis=1), (-1, 1))
-
-
-def transform_data(X, name):
-    assert name in ['log2', 'sqrt', 'reduce_center', 'pearson_regularization'], "name should be 'log2', 'sqrt', 'reduce_center', 'pearson_regularization'"
-    if name == 'log2':
-        return np.log2(X + 1)
-    elif name == 'sqrt':
-        return np.sqrt(X+1)
-    elif name == 'reduce_center':
-        mean, std = np.mean(X, axis=0), np.std(X, axis=0)
-        return (X - mean) / std
-    elif name == 'pearson_regularization':
-        mean = np.mean(X, axis=0)
-        return X / np.sqrt(mean+1)

@@ -36,7 +36,7 @@ data_path = get_data_path(name)
 
 
 # Dataset
-train_loader, test_loader, n_class, n_feat, class_name, feat_name, transform, n_sample = load_dataloader(data_path, name, device, batch_size=32)
+train_loader, test_loader, n_class, n_feat, class_name, feat_name, transform, n_sample = load_dataloader(data_path, name, device)
 print(f"In our dataset, we have {n_class} classes and {n_sample} examples. Each example contains {n_feat} features.")
 
 
@@ -76,8 +76,8 @@ print(f'The balanced test accuracy with our {model.name} is {np.round(test_balan
 correct_test_indices = np.argwhere(y_pred == y_true)
 ## Confusion matrix
 cm = get_confusion_matrix(y_true, y_pred, class_name, normalize='true')
-create_new_folder(os.path.join(save_path, save_name, "Figures"))
-plot_confusion_matrix(cm, file=os.path.join(save_path, save_name, "Figures", "confusion_matrix.png"), show=False)
+create_new_folder(os.path.join(save_path, save_name))
+plot_confusion_matrix(cm, file=os.path.join(save_path, save_name, "confusion_matrix.png"), show=False)
 
 
 # Save

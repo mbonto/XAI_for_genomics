@@ -19,7 +19,7 @@ argParser.add_argument("--size", type=int, help="number of samples", default=990
 args = argParser.parse_args()
 name = args.name
 n_sample = args.size
-
+add_noise = True
 
 # Path
 save_path = get_save_path(name, code_path)
@@ -28,10 +28,11 @@ data_path = get_data_path(name)
 
 
 # Simulation
-alpha, eta, proportion, n_gene, n_pathway, n_class, useful_paths, useful_genes = return_parameters(name)
+alpha, eta, beta, proportion, n_gene, n_pathway, n_class, useful_paths, useful_genes = return_parameters(name)
 print(f'         {name}           ')
-X, y = generate_hierarchical_data(alpha, eta, n_sample, proportion)
-X += np.random.uniform(0, 0.0001, X.shape)
+X, y = generate_hierarchical_data(alpha, beta, n_sample, proportion)
+if add_noise:
+    X += np.random.uniform(0, 0.0001, X.shape)
 
 
 # Save
@@ -43,6 +44,7 @@ dataset = {
     'n_gene': n_gene,
     'alpha': alpha,
     'eta': eta,
+    'beta': beta,
     'useful_paths': useful_paths, 
     'useful_genes': useful_genes
 }

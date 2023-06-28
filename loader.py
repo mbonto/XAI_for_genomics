@@ -72,7 +72,11 @@ def transform_data(X, transform='divide_by_sum', factor=1):
         elif transform == 'divide_by_sum':
             return X / np.sum(X, axis=1).reshape((-1, 1)) * factor
         elif transform == 'divide_by_norm':
-            return X / np.linalg.norm(X, axis=1).reshape((-1, 1)) * factor
+            with np.errstate(divide='ignore', invalid='ignore'):  # Trick to enforce division by 0 to be equal to 0.
+                norm = np.linalg.norm(X, axis=1).reshape((-1, 1))
+                result = X / norm * factor
+                result[norm[:, 0] == 0] = 0
+            return result
             
  
  

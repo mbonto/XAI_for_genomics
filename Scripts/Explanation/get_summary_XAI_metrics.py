@@ -89,12 +89,13 @@ print(f"  PGR: {np.round(np.mean(PGR) , 2)} +- {np.round(np.std(PGR) , 2)}")
 if name not in ['BRCA', 'KIRC', 'pancan']:
     print("")
     print("Feature agreement")
+    global_setting = "rank_mean_scores"  # "rank_mean_scores", "intersect_rank_scores"
     local = []
     _global = []
     
     for exp in exps:
         save_name = os.path.join(model_name, f"exp_{exp}", XAI_method, "figures")   
-        with open(os.path.join(save_path, save_name, f"ranking_{set_name}.csv"), "r") as f:
+        with open(os.path.join(save_path, save_name, f"ranking_{global_setting}_{set_name}.csv"), "r") as f:
             lines = f.readlines()
             for line in lines:
                 line = line.strip().split(', ')

@@ -12,6 +12,7 @@ from setting import *
 from loader import *
 from models import *
 from XAI_method import *
+from XAI_interpret import *
 from graphs import *
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -22,12 +23,14 @@ argParser.add_argument("-n", "--name", type=str, help="dataset name")
 argParser.add_argument("-m", "--model", type=str, help="model name (LR, MLP, DiffuseLR, DiffuseMLP)")
 argParser.add_argument("--exp", type=int, help="experiment number", default=1)
 argParser.add_argument("--set", type=str, help="set (train or test)")
+argParser.add_argument("--global_setting", type=str, help="set the function used to infer a global feature agreement metric", default="intersect_rank_scores", choices=["rank_mean_scores", "intersect_rank_scores"])
 argParser.add_argument("--diffusion", help="smooth the attributions", action='store_true')
 args = argParser.parse_args()
 name = args.name
 model_name = args.model
 exp = args.exp
 set_name = args.set
+global_setting = args.global_setting
 diffusion = args.diffusion
 print('Model    ', model_name)
 XAI_method = "Integrated_Gradients"
@@ -67,10 +70,14 @@ print('Studied classes', studied_class)
 
 
 # With two classes, the variables enabling to identify one class also enable to identify the other classes.
-# Assumption with more classes: the variables enabling to identify one class are a contrario useful to identify the other classes.  
+# Assumption with more classes: the variables enabling to identify one class do not enable to identify another class from the other classes.  
 other_class = {}
-for c in studied_class:
-    other_class[c] = [o for o in range(n_class) if o != c]
+if n_class == 2:
+    for c in studied_class:
+        other_class[c] = [o for o in range(n_class) if o != c]
+else:
+    for c in studied_class:
+        other_class[c] = []
 print('Other classes', other_class)
 
 
@@ -102,9 +109,12 @@ chosen_g  = {}
 for c in studied_class:
     indices = np.argwhere(y_true == c)[:, 0]
     attr_cls = attr[indices]
-    genes = np.argsort(-attr_cls, axis=1)[:, :counts[c]].reshape(-1)
-    list_g, nb_g = np.unique(genes, return_counts=True)
-    chosen_g["C"+str(c)] = list_g[np.argsort(-nb_g)[:counts[c]]]
+    if global_setting == "rank_mean_scores":
+        chosen_g["C" + str(c)] = np.argsort(-np.sum(attr_cls, axis=0))[:counts[c]]
+    elif global_setting == "intersect_rank_scores":
+        genes = np.argsort(-attr_cls, axis=1)[:, :counts[c]].reshape(-1)
+        list_g, nb_g = np.unique(genes, return_counts=True)
+        chosen_g["C" + str(c)] = list_g[np.argsort(-nb_g)[:counts[c]]]
 ## Intersection
 global_score = 0
 for c in studied_class:
@@ -135,7 +145,7 @@ print(' ')
 
 
 # Save
-file_name = f"ranking_diffusion_{set_name}.csv" if diffusion else f"ranking_{set_name}.csv"
+file_name = f"ranking_diffusion_{global_setting}_{set_name}.csv" if diffusion else f"ranking_{global_setting}_{set_name}.csv"
 with open(os.path.join(save_path, save_name, "figures", file_name), "w") as f:
     f.write(f"global, {np.round(global_score * 100, 2)}\n")
     f.write(f"local, {np.round(local_score * 100, 2)}\n")

@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import os
 from evaluate import *
+from loader import *
 from sklearn.metrics import classification_report, balanced_accuracy_score
 
 
@@ -83,7 +84,7 @@ def keep_features(X, best_indices, baseline):
     device = X_temp.device
     s = np.repeat(np.arange(X.shape[0]), len(zeros))
     f = np.tile(zeros, X.shape[0])
-    X_temp[s, f] = baseline[np.repeat(np.zeros(X.shape[0]), len(zeros)), f].clone().detach().to(device)
+    X_temp[s, f] = baseline[np.repeat(np.zeros(X.shape[0], dtype='int64'), len(zeros)), f].clone().detach().to(device)
     return X_temp
             
             

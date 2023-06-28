@@ -66,6 +66,7 @@ model.eval()
 
 # Attributions
 attr, y_pred, y_true, labels, features, baseline, _ = load_attributions(XAI_method, os.path.join(save_path, save_name, XAI_method), set_name=set_name)
+baseline = torch.from_numpy(baseline)
 
 
 # Store all examples in a tensor
@@ -108,7 +109,7 @@ attr = transform_data(attr, transform='divide_by_norm')
 
 
 # Attributions averaged per class
-scores = np.load(os.path.join(save_path, save_name, "{}_scores_with_{}_{}.npy".format(XAI_method, "mean", set_name)), allow_pickle=True).item()
+scores = np.load(os.path.join(save_path, save_name, XAI_method, "{}_scores_with_{}_{}.npy".format(XAI_method, "mean", set_name)), allow_pickle=True).item()
 
 
 # Curves
@@ -116,21 +117,21 @@ classes = []  # precision and recall are computed for each class in this list
 
 # Performance when the K most important features of each class are kept/modified
 K = np.concatenate((np.arange(1, 10, 1), np.arange(10, 200, 10), np.arange(200, n_feat, 100)))
-## First, the K most important are kept/modified.
+## First, the K most important are kept.
 res_cls_best, n_kept_cls_best, kept_feat_cls_best = get_results_per_class(model, X, Y, K, scores, 'keep_best', baseline, classes)
 ## Then, the K most important are modified. 
 res_cls_worst, n_kept_cls_worst, kept_feat_cls_worst = get_results_per_class(model, X, Y, K[:-1], scores, 'remove_best', baseline, classes)
 
-# Performance when the K most important genes are kept/removed
+# Performance when the K most important features of each example are kept/modified
 K = np.concatenate((np.arange(1, 10, 1), np.arange(10, 100, 10), np.arange(100, n_feat, 100)))
-## Balanced
+## Average over all examples adjusted by the proportion of each class
 res_bal_best, kept_feat_bal_best = get_results_with_best_features_kept_or_removed(model, X, Y, K, attr, baseline, classes, kept=True, balance=True)
 res_bal_worst, kept_feat_bal_worst = get_results_with_best_features_kept_or_removed(model, X, Y, K, attr, baseline, classes, kept=False, balance=True)
-## Unbalanced
+## Average over all examples
 res_best, kept_feat_best = get_results_with_best_features_kept_or_removed(model, X, Y, K, attr, baseline, classes, kept=True, balance=False)
 res_worst, kept_feat_worst = get_results_with_best_features_kept_or_removed(model, X, Y, K, attr, baseline, classes, kept=False, balance=False)
 
-# Show how the accuracy of the model changes when random genes are removed
+# Performance when random genes are removed
 res_rand = get_results_with_random_features(model, X, Y, K, n_simu, baseline, classes)
 lim = np.argmax(np.argwhere((K <= n_feat/2)))
 res_rand_wo_bal_best = get_results_with_random_features(model, X, Y, K[:lim], n_simu, baseline, classes, kept_feat_bal_best[:lim])

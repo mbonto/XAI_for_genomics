@@ -127,7 +127,12 @@ def return_parameters(name):
     for P in useful_genes.keys():
         print('Pathway', P, end='\r')
         validity = False
-        min_prop = 0.1 / n_gene
+        if sparsity is None:
+            min_prop = 0.1 / case
+            print(f"Genes over-expressed in a group containing {case} variables have a drawing probability in this group higher than {min_prop}.")
+        else:
+            min_prop = 0.1 / (sparsity * n_gene)
+            print(f"Genes over-expressed in a group containing about {sparsity * n_gene} variables have a drawing probability in this group higher than {min_prop}.")
         while not validity:
             if min(beta[P][useful_genes[P]]) >= min_prop:
                     validity = True

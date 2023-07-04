@@ -15,7 +15,7 @@ from utils import *
 # Arguments
 argParser = argparse.ArgumentParser()
 argParser.add_argument("-n", "--name", type=str, help="dataset name")
-argParser.add_argument("-m", "--method", type=str, default='pearson_correlation', help="method used to compute the adjacency matrix of the graph")
+argParser.add_argument("--method", type=str, default='pearson_correlation', help="method used to compute the adjacency matrix of the graph")
 argParser.add_argument("--min_value", type=float, default=None, help="minimal value appearing in the adjacency matrix of the graph")
 args = argParser.parse_args()
 name = args.name

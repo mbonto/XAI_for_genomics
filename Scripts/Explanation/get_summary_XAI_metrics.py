@@ -114,7 +114,7 @@ if name not in ['BRCA', 'KIRC', 'pancan']:
     
     for exp in exps:
         save_name = os.path.join(model_name, f"exp_{exp}", XAI_method, "figures")   
-        with open(os.path.join(save_path, save_name, f"ranking_diffusion_{set_name}.csv"), "r") as f:
+        with open(os.path.join(save_path, save_name, f"ranking_diffusion_{global_setting}_{set_name}.csv"), "r") as f:
             lines = f.readlines()
             for line in lines:
                 line = line.strip().split(', ')
